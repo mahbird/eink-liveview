@@ -212,7 +212,7 @@
 
                 <h4>2. Display Class &amp; Driver Setup</h4>
                 <p>Make sure you have installed the <a href="https://github.com/ZinggJM/GxEPD2" target="_blank" rel="noopener" style="color:#4fc3f7;">GxEPD2</a> library, if you are using 4 grey display, use the <a href="https://github.com/ZinggJM/GxEPD2_4G" target="_blank" rel="noopener" style="color:#4fc3f7;">GxEPD2_4G</a> library.
-Select the correct display driver matching your panel controller (e.g. <code>GxEPD2_154_D67</code>) and color format header (<code>GxEPD2_BW</code>, <code>GxEPD2_3C</code>, <code>GxEPD2_4C</code>, <code>GxEPD2_7C</code>, etc.). Consult the GxEPD2 display selection header files for the driver class.</p>
+Select the correct display driver matching your panel controller (e.g. <code>GxEPD2_154_D67</code>) and display class header (<code>GxEPD2_BW</code>, <code>GxEPD2_3C</code>, <code>GxEPD2_4C</code>, <code>GxEPD2_7C</code>, etc.). Consult the GxEPD2 display selection header files for the driver class.</p>
 
                 <h4>3. Window Setup Must Happen Before <code>firstPage()</code></h4>
                 <p><code>setFullWindow()</code> or <code>setPartialWindow(x, y, w, h)</code> must be called <strong>before</strong> <code>firstPage()</code>. They configure the update region for the following paged draw loop. Calling them inside the <code>do { ... } while (nextPage())</code> body does not work as expected on hardware.</p>
@@ -225,17 +225,20 @@ Select the correct display driver matching your panel controller (e.g. <code>GxE
                 <p>Paged drawing must occur inside a <code>firstPage()</code> / <code>nextPage()</code> loop. Always call display.powerOff() to power the panel down to avoid damaging the panel and saving power:</p>
 <pre>#include &lt;GxEPD2_BW.h&gt; // The display class e.g. BW/3C/4C/7C
 
-// CS, DC, RST, BUSY = free GPIOs (avoid input-only / awkward boot pins)
-// MOSI, SCK = hardware SPI pins (board-fixed)
+
 GxEPD2_BW&lt;GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT&gt; display(
   GxEPD2_154_D67(/*CS=*/ 15, /*DC=*/ 27, /*RST=*/ 26, /*BUSY=*/ 25));
+  
+//GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, PAGE_HEIGHT> display(GxEPD2_DRIVER_CLASS(CS, DC, RST, BUSY));
+//Consult GxEPD2 examples if you are unsure about this
+
 
 void setup() {
   display.init(115200, true, 2, false);
   // display.setRotation(1); // optional: 0,1,2,3
 
   display.setFullWindow();   // MUST be before firstPage()
-  // display.setPartialWindow(x, y, w, h); // alternative region
+  // display.setPartialWindow(x, y, w, h); // Or partial update window if your display supports it, some manufacturers recommend a full refresh every 5 partial refresh and they warn that exceeding this limit too often can cause permanent abnormal display states or irreversible uneven fading on smaller panels. I personally only do a full refresh for my e-ink clock twice per hour (1 in 30) which seem to be find after 2 years but adjust the refreshes at your own risk.
 
   display.firstPage();
   do {

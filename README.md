@@ -1,10 +1,10 @@
 # GxEPD2 e-ink Liveview Editor
 
-A **standalone browser-based live preview editor** for the [GxEPD2](https://github.com/ZinggJM/GxEPD2) Arduino library (e-paper / e-ink displays).
+A **standalone browser-based live preview editor** for the [GxEPD2](https://github.com/ZinggJM/GxEPD2) Arduino library (e-paper / e-ink displays/ EPD) giving you a visual approach to code your displays!
 
 Write drawing commands, see them rendered instantly on a canvas, drag objects, get warnings for common mistakes, and copy clean code into your sketch — no install, no build step. Open the single HTML file in any modern browser.
 
-Open the<a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser to use it directly. Currently this is developed for desktop use with keyboard and mouse and is not suitable for mobile devices.
+Open the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser to use it directly. Currently this editor is developed for desktop use with keyboard and mouse and is not suitable for mobile devices.
 
 ---
 
