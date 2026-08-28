@@ -1,16 +1,18 @@
-# GxEPD2 e-ink Liveview Editor
+# GxEPD2 Visual Editor
 
-A **standalone browser-based live preview editor** for the [GxEPD2](https://github.com/ZinggJM/GxEPD2) Arduino library (e-paper / e-ink displays/ EPD) giving you a visual approach to code your displays!
+A **standalone, browser-based visual editor** for the [GxEPD2](https://github.com/ZinggJM/GxEPD2) Arduino library (e-paper / e-ink / EPD displays).
 
-Write drawing commands, see them rendered instantly on a canvas, drag objects, get warnings for common mistakes, and copy clean code into your sketch — no install, no build step. Open the single HTML file in any modern browser.
+Write drawing commands and see them rendered live on a canvas, drag or resize objects, catch common mistakes early, and copy clean code into your sketch — no install, no build step. Open the single HTML file in any modern desktop browser.
 
-Open the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser to use it directly. Currently this editor is developed for desktop use with keyboard and mouse and is not suitable for mobile devices.
+**Use it online:** [mahbird.github.io/eink-liveview](https://mahbird.github.io/eink-liveview/)
+
+> **Note:** Built for desktop use with keyboard and mouse.
 
 ---
 
 ## Features
 
-- Live canvas preview for **BW**, **3-colour**, **4-colour**, **6-colour (Spectra)** and **7-colour (ACeP)** e-ink displays
+- Live canvas preview for **BW**, **3-colour**, **4-colour**, **6-colour (Spectra)** and **7-colour (ACeP)** EPD
 - Supports most GxEPD2 / Adafruit_GFX drawing primitives, text, simple variables, and basic `for` / `while` loops (experimental)
 - Because GxEPD2 builds on Adafruit_GFX, much of this tool is also useful for LCD sketches that use Adafruit_GFX (adjust colours as needed)
 - Drag objects on the canvas or edit them in the properties panel
@@ -25,7 +27,7 @@ Open the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on githu
 
 ## Quick start
 
-1. Download or clone this repository, or direclty use the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser. Currently this is developed for desktop use and is not suitable for mobile devices.
+1. Download or clone this repository, or direclty use the <a href="https://mahbird.github.io/eink-liveview/">HTML hosted on github</a> in your browser. Currently this is developed for desktop use and is not suitable for mobile devices.
 2. Edit the C++ drawing code on the left (or use **Insert Tool**).
 3. Watch the live preview and parser output update.
 4. Click **Copy Clean Code** and paste into your `do { ... } while (display.nextPage());` loop.
