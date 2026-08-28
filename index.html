@@ -86,7 +86,7 @@
 <body>
 
     <div class="toolbar">
-        <strong>GxEPD2 Live Editor</strong>
+        <strong>GxEPD2 Visual Editor</strong>
         <label>Width:</label> <input type="number" id="disp-w" value="400" min="1" max="2000" onchange="processCode()">
         <label>Height:</label> <input type="number" id="disp-h" value="300" min="1" max="2000" onchange="processCode()">
         <label>Class:</label>
@@ -216,7 +216,7 @@ Select the correct display driver matching your panel controller (e.g. <code>GxE
 
                 <h4>3. Window Setup Must Happen Before <code>firstPage()</code></h4>
                 <p><code>setFullWindow()</code> or <code>setPartialWindow(x, y, w, h)</code> must be called <strong>before</strong> <code>firstPage()</code>. They configure the update region for the following paged draw loop. Calling them inside the <code>do { ... } while (nextPage())</code> body does not work as expected on hardware.</p>
-                <p>This live editor still draws shapes over the full canvas for layout preview — the dashed PartialWindow box is only a visual guide, not a clip region.</p>
+                <p>This Visual Editor still draws shapes over the full canvas for layout preview — the dashed PartialWindow box is only a visual guide, not a clip region.</p>
 
                 <h4>4. Rotation</h4>
                 <p>Use <code>display.setRotation(1) // 0-3 </code> after <code>init()</code> to change drawing direction / swap logical width and height. This editor does not simulate rotation — set the toolbar W/H to match your rotated dimensions when previewing.</p>
@@ -242,7 +242,7 @@ void setup() {
 
   display.firstPage();
   do {
-    // --- Paste Live Editor Output Here ---
+    // --- Paste Visual Editor Output Here ---
     display.fillScreen(GxEPD_WHITE);
     display.setTextColor(GxEPD_BLACK);
     display.setTextSize(1);
