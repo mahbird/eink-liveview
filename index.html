@@ -2214,17 +2214,21 @@ display.println(" for GxEPD2 eink displays");
         processCode(false, true);
     }
 
-    function initResizers() {
+function initResizers() {
         const resizer1 = document.getElementById('resizer-1');
         const resizer2 = document.getElementById('resizer-2');
         const col1 = document.getElementById('col-1');
         const col2 = document.getElementById('col-2');
         const col3 = document.getElementById('col-3');
         const container = document.querySelector('.main-area');
+        const RESIZER_TOTAL = 12; // two 6px resizers
+        const MIN_COL1 = 150, MIN_COL2 = 150, MIN_COL3 = 200;
 
         let activeResizer = null;
 
         function onMouseDown(e, resizer) {
+            e.preventDefault();
+            e.stopPropagation();
             activeResizer = resizer;
             resizer.classList.add('dragging');
             document.body.style.cursor = 'col-resize';
@@ -2237,18 +2241,38 @@ display.println(" for GxEPD2 eink displays");
         window.addEventListener('mousemove', (e) => {
             if (!activeResizer) return;
             const containerRect = container.getBoundingClientRect();
-            
+            const totalW = containerRect.width;
+
             if (activeResizer === resizer1) {
+                // Drag boundary between col1 and col2; col3 keeps its current width
+                const col3W = Math.max(MIN_COL3, col3.getBoundingClientRect().width);
                 let newW1 = e.clientX - containerRect.left;
-                if (newW1 < 150) newW1 = 150;
-                if (newW1 > containerRect.width - 300) newW1 = containerRect.width - 300;
-                col1.style.width = `${newW1}px`;
-            } else if (activeResizer === resizer2) {
-                let newW3 = containerRect.right - e.clientX;
-                if (newW3 < 200) newW3 = 200;
-                if (newW3 > containerRect.width - 300) newW3 = containerRect.width - 300;
-                col3.style.width = `${newW3}px`;
+                const maxW1 = totalW - col3W - MIN_COL2 - RESIZER_TOTAL;
+                if (newW1 < MIN_COL1) newW1 = MIN_COL1;
+                if (newW1 > maxW1) newW1 = maxW1;
+                const newW2 = totalW - newW1 - col3W - RESIZER_TOTAL;
+
+                col1.style.flex = 'none';
+                col2.style.flex = 'none';
                 col3.style.flex = 'none';
+                col1.style.width = `${newW1}px`;
+                col2.style.width = `${Math.max(MIN_COL2, newW2)}px`;
+                col3.style.width = `${col3W}px`;
+            } else if (activeResizer === resizer2) {
+                // Drag boundary between col2 and col3; col1 keeps its current width
+                const col1W = Math.max(MIN_COL1, col1.getBoundingClientRect().width);
+                let newW3 = containerRect.right - e.clientX;
+                const maxW3 = totalW - col1W - MIN_COL2 - RESIZER_TOTAL;
+                if (newW3 < MIN_COL3) newW3 = MIN_COL3;
+                if (newW3 > maxW3) newW3 = maxW3;
+                const newW2 = totalW - col1W - newW3 - RESIZER_TOTAL;
+
+                col1.style.flex = 'none';
+                col2.style.flex = 'none';
+                col3.style.flex = 'none';
+                col1.style.width = `${col1W}px`;
+                col2.style.width = `${Math.max(MIN_COL2, newW2)}px`;
+                col3.style.width = `${newW3}px`;
             }
         });
 
