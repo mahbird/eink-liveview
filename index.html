@@ -2038,7 +2038,7 @@ display.println(" for GxEPD2 eink displays");
             const isText = ['print', 'println'].includes(obj.cmd);
             html += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-top:4px;">
                 ⚠️ <strong>Parameters use variables or expressions</strong> (e.g. <code>margin</code>, <code>boxW</code>, <code>display.height()</code>${isText ? ', or the linked <code>setCursor</code>' : ''}).<br>
-                Clicking alone will not change the code. <strong>Dragging or resizing</strong> this object will replace those expressions with plain numbers.
+                <strong>Dragging or resizing</strong> this object will replace those expressions with plain numbers.
             </div>`;
         }
         
