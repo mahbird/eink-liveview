@@ -25,7 +25,7 @@ Write drawing commands, see them rendered instantly on a canvas, drag objects, g
 
 ## Quick start
 
-1. Download or clone this repository, or direclty use the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser.
+1. Download or clone this repository, or direclty use the <a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser. Currently this is developed for desktop use and is not suitable for mobile devices.
 2. Edit the C++ drawing code on the left (or use **Insert Tool**).
 3. Watch the live preview and parser output update.
 4. Click **Copy Clean Code** and paste into your `do { ... } while (display.nextPage());` loop.
