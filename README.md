@@ -4,7 +4,7 @@ A **standalone browser-based live preview editor** for the [GxEPD2](https://gith
 
 Write drawing commands, see them rendered instantly on a canvas, drag objects, get warnings for common mistakes, and copy clean code into your sketch — no install, no build step. Open the single HTML file in any modern browser.
 
-**Live use:** download [`GxEPD2_liveview.html`](./GxEPD2_liveview.html) and open it locally, or host it (e.g. GitHub Pages).
+Open the<a href="https://mahbird.github.io/eink_liveview/">HTML hosted on github</a> in your browser to use it directly. Currently this is developed for desktop use with keyboard and mouse and is not suitable for mobile devices.
 
 ---
 
