@@ -1,0 +1,2271 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GxEPD2 Liveview Editor for e-ink display</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background: #1e1e1e; color: #d4d4d4; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        .toolbar { padding: 10px 15px; background: #2d2d2d; border-bottom: 1px solid #444; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; z-index: 20; }
+        .toolbar input, .toolbar select { background: #3c3c3c; color: white; border: 1px solid #555; padding: 5px; border-radius: 3px; }
+        .toolbar input[type="number"] { width: 75px; }
+        .toolbar button { background: #0e639c; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 3px; font-weight: bold; }
+        .toolbar button:hover:not(:disabled) { background: #1177bb; }
+        .toolbar button:disabled { background: #444; color: #888; cursor: not-allowed; }
+        
+        .insert-bar { padding: 8px 15px; background: #252526; border-bottom: 1px solid #444; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; font-size: 0.9em; z-index: 20; }
+        .insert-bar label { color: #9cdcfe; }
+        .insert-bar input, .insert-bar select { background: #3c3c3c; color: white; border: 1px solid #555; padding: 4px; border-radius: 3px; }
+        .insert-bar input[type="number"] { width: 60px; }
+        .insert-bar input[type="text"] { width: 120px; }
+        
+        .main-area { display: flex; flex: 1; overflow: hidden; position: relative; width: 100%; }
+        .col { display: flex; flex-direction: column; overflow: hidden; min-width: 150px; }
+        #col-1 { width: 30%; }
+        #col-2 { width: 25%; }
+        #col-3 { flex: 1; min-width: 250px; }
+
+        .resizer { width: 6px; background: #2d2d2d; border-left: 1px solid #444; border-right: 1px solid #444; cursor: col-resize; user-select: none; transition: background 0.15s; z-index: 10; flex-shrink: 0; }
+        .resizer:hover, .resizer.dragging { background: #007acc; }
+
+.col-header { 
+  background: #252526; 
+  padding: 8px 15px; 
+  font-size: 0.9em; 
+  font-weight: bold; 
+  border-bottom: 1px solid #444; 
+  flex-shrink: 0; 
+  display: flex; 
+  justify-content: space-between; /* Fixed */
+  align-items: center; 
+}
+        .header-btn { background: #0e639c; color: white; border: none; padding: 3px 8px; border-radius: 3px; cursor: pointer; font-size: 0.85em; font-weight: bold; }
+        .header-btn:hover { background: #1177bb; }
+
+        .editor-wrapper { flex: 1; display: flex; background: #1e1e1e; overflow: hidden; position: relative; }
+        .line-numbers { width: 45px; background: #252526; color: #858585; font-family: monospace; font-size: 14px; line-height: 20px; padding: 15px 5px; text-align: right; user-select: none; border-right: 1px solid #333; overflow: hidden; flex-shrink: 0; }
+        .line-num { height: 20px; padding-right: 4px; }
+        .line-num.active-line { background: #04395e; color: #fff; font-weight: bold; border-right: 3px solid #007acc; }
+
+        textarea { flex: 1; background: transparent; color: #d4d4d4; border: none; padding: 15px 10px; font-family: monospace; font-size: 14px; line-height: 20px; resize: none; outline: none; white-space: pre; overflow: auto; }
+        
+        #parsed-code { flex: 1; padding: 15px; font-family: monospace; font-size: 13px; line-height: 20px; overflow-y: auto; background: #1e1e1e; white-space: pre-wrap; }
+        .line-ignored { color: #6a9955; }
+        .line-parsed { color: #dcdcaa; }
+        .line-loop-child { color: #b5cea8; padding-left: 15px; }
+        .line-error { color: #f44336; font-weight: bold; }
+        .line-selected { background: #264f78; border-radius: 2px; color: #ffffff; }
+        .err-hint { color: #ff9800; font-size: 0.85em; display: block; margin-left: 20px; }
+        .warn-hint { color: #e5c07b; font-size: 0.85em; display: block; margin-left: 20px; }
+        
+        .canvas-container { flex: 1; display: flex; background: #2d2d2d; position: relative; overflow: auto; padding: 20px; }
+        canvas { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.5); cursor: default; image-rendering: pixelated; image-rendering: crisp-edges; margin: auto; flex-shrink: 0; }
+        
+        .properties-panel { background: #252526; padding: 12px 15px; border-top: 1px solid #444; min-height: 120px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex-shrink: 0; }
+        .prop-group { display: flex; align-items: center; gap: 5px; }
+        .prop-group label { font-size: 0.85em; color: #9cdcfe; }
+        .prop-group input, .prop-group select { background: #3c3c3c; color: white; border: 1px solid #555; padding: 4px; border-radius: 3px; }
+        .prop-group input[type="number"] { width: 65px; }
+        .prop-group input[type="text"] { width: 120px; }
+
+        /* Modal Guide Styling */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 100; justify-content: center; align-items: center; }
+        .modal-content { background: #252526; border: 1px solid #555; border-radius: 6px; width: 650px; max-width: 90%; max-height: 85vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.5); }
+        .modal-header { padding: 12px 20px; background: #2d2d2d; border-bottom: 1px solid #444; display: flex; justify-content: space-between; align-items: center; font-weight: bold; }
+        .modal-body { padding: 20px; overflow-y: auto; font-size: 0.9em; line-height: 1.5; color: #d4d4d4; }
+        .modal-body h4 { color: #9cdcfe; margin-top: 15px; margin-bottom: 5px; border-bottom: 1px solid #333; padding-bottom: 3px; }
+        .modal-body pre { background: #1e1e1e; padding: 10px; border-radius: 4px; border: 1px solid #333; font-family: monospace; overflow-x: auto; color: #ce9178; }
+        .modal-footer { padding: 10px 20px; background: #2d2d2d; border-top: 1px solid #444; text-align: right; }
+    </style>
+<link rel="icon" 
+        type="image/png"         href="data:image/png;base64,AAABAAEAICAAAAEAIACoEAAAFgAAACgAAAAgAAAAQAAAAAEAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAP8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIKT3/AAAA/wgpPf8IKT3/CCk9/wgpPf8IKT3/CCk9/wgpPf8IKT3/CCk9/wgpPf8AAAD/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIKT3/CCk9/8nl9/8AAAD/yeX3/8nl9//J5ff/yeX3/8nl9//J5ff/yeX3/8nl9//J5ff/yeX3/wAAAP/J5ff/CCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/wgpPf/J5ff/AAAA/wAAAP8AAAD///////////////////////////////////////////8AAAD/AAAA/wAAAP/J5ff/CCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgpPf8IKT3/yeX3/wAAAP//////AAAA//////8AAAD/////////////////////////////////AAAA//////8AAAD//////wAAAP/J5ff/CCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/8nl9//J5ff/AAAA//////8AAAD//////wAAAP////////////////////////////////8AAAD//////wAAAP//////AAAA/8nl9//J5ff/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgpPf8IKT3/yeX3/8nl9////////////wAAAP//////////////////////////////////////////////////////AAAA////////////yeX3/8nl9/8IKT3/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIKT3/XZGy/wgpPf/J5ff///////////////////////////////////////////8AMzP/ADMz////////////////////////////////////////////yeX3/wgpPf9dkbL/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/12Rsv8IKT3/yeX3/////////////////////////////////////////////////wAzM/8AMzP/////////////////////////////////////////////////yeX3/wgpPf9dkbL/CCk9/wAAAAAAAAAAAAAAAAgpPf9dkbL/XZGy/wgpPf/J5ff///////////////////////////////////////////8AMzP/AAAA/wAAAP8AMzP////////////////////////////////////////////J5ff/CCk9/12Rsv9dkbL/CCk9/wAAAAAAAAAACCk9/12Rsv9dkbL/CCk9/8nl9///////////////////////////////////////ADMz/wAAAP8AAAD/AAAA/wAAAP8AMzP//////////////////////////////////////8nl9/8IKT3/XZGy/12Rsv8IKT3/AAAAAAAAAAAIKT3/CCk9/12Rsv8IKT3/yeX3//////////////////////////////////////8AMzP/AAAA/wAAAP8AAAD/AAAA/wAzM///////////////////////////////////////yeX3/wgpPf9dkbL/CCk9/wgpPf8AAAAAAAAAAAgpPf9dkbL/XZGy/wgpPf/J5ff///////////////////////////////////////////8AMzP/AAAA/wAAAP8AMzP////////////////////////////////////////////J5ff/CCk9/12Rsv9dkbL/CCk9/wAAAAAIKT3/XZGy/12Rsv9dkbL/CCk9/8nl9////////////wAAAP8AAAD/////////////////////////////////////////////////////////////////AAAA/wAAAP///////////8nl9/8IKT3/XZGy/12Rsv9dkbL/CCk9/wgpPf9dkbL/XZGy/12Rsv9dkbL/CCk9/35+fv//////AAAA/wAAAP//////////////////////ADMz/wAzM/8AMzP/ADMz//////////////////////8AAAD/AAAA//////9+fn7/CCk9/12Rsv9dkbL/XZGy/12Rsv8IKT3/AAAAAAgpPf9dkbL/CCk9/12Rsv8IKT3/XZGy/35+fv////////////////////////////////8AMzP/fn5+/35+fv8AMzP/////////////////////////////////fn5+/12Rsv8IKT3/XZGy/wgpPf9dkbL/CCk9/wAAAAAAAAAACCk9/wgpPf9dkbL/XZGy/wgpPf8IKT3/XZGy/35+fv///////////wAAAP8AAAD/fn5+/12Rsv8AMzP/ADMz/12Rsv9+fn7/AAAA/wAAAP///////////35+fv9dkbL/CCk9/wgpPf9dkbL/XZGy/wgpPf8IKT3/AAAAAAAAAAAIKT3/XZGy/12Rsv9dkbL/XZGy/wgpPf9dkbL/XZGy/35+fv9+fn7/AAAA/wAAAP9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv8AAAD/AAAA/35+fv9+fn7/XZGy/12Rsv8IKT3/XZGy/12Rsv9dkbL/XZGy/wgpPf8AAAAACCk9/12Rsv9dkbL/XZGy/12Rsv9dkbL/CCk9/12Rsv9dkbL/XZGy/12Rsv8AAAD/AAAA/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/wAAAP8AAAD/XZGy/12Rsv9dkbL/XZGy/wgpPf9dkbL/XZGy/12Rsv9dkbL/XZGy/wgpPf8IKT3/XZGy/12Rsv9dkbL/XZGy/wgpPf8IKT3/CCk9/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv8IKT3/CCk9/wgpPf9dkbL/XZGy/12Rsv9dkbL/CCk9/wgpPf9dkbL/XZGy/12Rsv8IKT3/CCk9/wAAAAAIKT3/CCk9/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/CCk9/wgpPf8AAAAACCk9/wgpPf9dkbL/XZGy/12Rsv8IKT3/CCk9/12Rsv9dkbL/CCk9/wgpPf8AAAAAAAAAAAAAAAAIKT3/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv8IKT3/AAAAAAAAAAAAAAAACCk9/wgpPf9dkbL/XZGy/wgpPf8IKT3/XZGy/wgpPf8IKT3/AAAAAAAAAAAAAAAAAAAAAAAAAAAIKT3/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/wgpPf9dkbL/CCk9/wAAAAAIKT3/CCk9/wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIKT3/CCk9/12Rsv9dkbL/XZGy/12Rsv9dkbL/XZGy/12Rsv9dkbL/CCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACCk9/wgpPf8IKT3/CCk9/wgpPf8IKT3/CCk9/wgpPf8AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA////////////3/v//4AB//4AAH/8AAA/+AAAH/gAAB/wAAAP4AAAB8AAAAOAAAABgAAAAYAAAAGAAAABAAAAAAAAAACAAAABgAAAAYAAAAEAAAAAAAAAAAIAAEAHAADgD4AB8J/AA/n/8A////////////////////////////8=">
+
+</head>
+<body>
+
+    <div class="toolbar">
+        <strong>GxEPD2 Live Editor</strong>
+        <label>Width:</label> <input type="number" id="disp-w" value="400" min="1" max="2000" onchange="processCode()">
+        <label>Height:</label> <input type="number" id="disp-h" value="300" min="1" max="2000" onchange="processCode()">
+        <label>Class:</label>
+        <select id="disp-class" onchange="onDisplayClassChange()">
+            <option value="BW">BW (Black, White)</option>
+            <option value="4GREY">4-Grey (Black, D-Grey, L-Grey, White)</option>
+            <option value="BWR">BWR (Black, White, Red)</option>
+            <option value="BWY">BWY (Black, White, Yellow)</option>
+            <option value="BWRY">BWRY (Black, White, Red, Yellow)</option>
+            <option value="SPECTRA6" selected>Spectra 6 (Black, White, Blue, Green, Yellow, Red)</option>
+            <option value="ACEP">ACeP (Black, White, Red, Yellow, Blue, Green, Orange)</option>
+        </select>
+        <button style="background: #17a2b8;" onclick="toggleGuideModal(true)">📖 Beginner's Guide</button>
+        <button style="background: #6f42c1;" onclick="toggleAboutModal(true)">🦉 About</button>
+        <div style="margin-left: auto; display: flex; gap: 8px;">
+            <button id="btn-undo" onclick="undo()" disabled>↩ Undo</button>
+            <button id="btn-redo" onclick="redo()" disabled>↪ Redo</button>
+            <button id="btn-clear" onclick="clearCanvas()" style="background:#c0392b;">🗑️ Clear</button>
+        </div>
+    </div>
+
+    <div class="insert-bar">
+        <strong>Insert Tool:</strong>
+        <select id="insert-cmd" onchange="updateInsertFields()">
+            <option value="fillRect">fillRect</option>
+            <option value="drawRect">drawRect</option>
+            <option value="fillRoundRect">fillRoundRect</option>
+            <option value="drawRoundRect">drawRoundRect</option>
+            <option value="fillCircle">fillCircle</option>
+            <option value="drawCircle">drawCircle</option>
+            <option value="fillTriangle">fillTriangle</option>
+            <option value="drawTriangle">drawTriangle</option>
+            <option value="drawLine">drawLine</option>
+            <option value="drawFastHLine">drawFastHLine</option>
+            <option value="drawFastVLine">drawFastVLine</option>
+            <option value="drawPixel">drawPixel</option>
+            <option value="drawBitmap">drawBitmap</option>
+            <option value="drawInvertedBitmap">drawInvertedBitmap</option>
+            <option value="fillScreen">fillScreen</option>
+            <option value="setCursor">setCursor</option>
+            <option value="setTextColor">setTextColor</option>
+            <option value="setTextSize">setTextSize</option>
+            <option value="drawChar">drawChar</option>
+            <option value="print">print</option>
+            <option value="println">println</option>
+            <option value="setPartialWindow">setPartialWindow</option>
+        </select>
+
+        <div id="insert-fields" style="display: flex; gap: 8px; align-items: center;"></div>
+        <button style="background: #28a745; color: white; border: none; padding: 4px 10px; border-radius: 3px; cursor: pointer; font-weight: bold;" onclick="insertFunctionCode()">+ Insert</button>
+    </div>
+
+    <div class="main-area">
+        <div class="col" id="col-1">
+            <div class="col-header">
+                <span>C++ Code Input / Output</span>
+                <button class="header-btn" id="btn-copy-code" onclick="copyCode()" title="Copy drawing code with comments removed">📋 Copy Clean Code</button>
+            </div>
+            <div class="editor-wrapper">
+                <div id="line-numbers" class="line-numbers"></div>
+                <textarea id="code-input" spellcheck="false" oninput="onCodeInput()" onscroll="syncScroll()"></textarea>
+            </div>
+        </div>
+
+        <div class="resizer" id="resizer-1"></div>
+
+        <div class="col" id="col-2">
+            <div class="col-header">Parser Output</div>
+            <div id="parsed-code"></div>
+        </div>
+
+        <div class="resizer" id="resizer-2"></div>
+
+        <div class="col" id="col-3">
+            <div class="col-header">
+                <span>Live Preview</span>
+                <div style="display: flex; gap: 8px; align-items: center;">
+                    <label style="font-weight: normal; font-size: 0.85em; color: #9cdcfe;">Grid:</label>
+                    <select id="grid-select" onchange="renderCanvas()" style="background:#3c3c3c; color:white; border:1px solid #555; padding:2px 4px; border-radius:3px; font-size:0.85em;">
+                        <option value="none">none</option>
+                        <option value="10">10px</option>
+                        <option value="50">50px</option>
+                        <option value="100">100px</option>
+                    </select>
+                    <label style="font-weight: normal; font-size: 0.85em; color: #9cdcfe;">Zoom:</label>
+                    <select id="zoom-select" onchange="updateZoom()" style="background:#3c3c3c; color:white; border:1px solid #555; padding:2px 4px; border-radius:3px; font-size:0.85em;">
+                        <option value="0.25">0.25x</option>
+                        <option value="0.5">0.5x</option>
+                        <option value="1" selected>1x</option>
+                        <option value="2">2x</option>
+                        <option value="5">5x</option>
+                    </select>
+                    <button class="header-btn" onclick="exportPNG()">📷 Export PNG</button>
+                </div>
+            </div>
+            <div class="canvas-container" id="canvas-container">
+                <canvas id="display-canvas"></canvas>
+            </div>
+            <div class="properties-panel" id="props-panel"></div>
+        </div>
+    </div>
+
+    <!-- Beginner Hardware & Setup Guide Modal -->
+    <div class="modal-overlay" id="guide-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>📖 Hardware & Arduino Code Setup Guide For Beginners</span>
+                <button onclick="toggleGuideModal(false)" style="background:none; border:none; color:white; font-size:1.2em; cursor:pointer;">✖</button>
+            </div>
+            <div class="modal-body">
+                <p>This live visual editor focuses exclusively on rendering display drawing commands. To run this code on physical hardware, your C++ sketch requires proper driver includes, pin mappings, and initialization loops.</p>
+                
+                <h4>1. Hardware SPI &amp; Pin Definitions</h4>
+                <p><strong>MOSI and SCK</strong> must use your board's hardware SPI pins (they come from the MCU SPI peripheral and are not easy to move). Look up the default SPI pins for your board (ESP32, RP2040, Arduino, etc.).</p>
+                <p><strong>CS, DC, RST, BUSY</strong> are chosen by you in the GxEPD2 constructor — most free GPIOs work, with a few practical limits:</p>
+                <ul style="margin: 6px 0 8px 18px; padding: 0; line-height: 1.45;">
+                    <li>SPI pins can be shared with SD-card, but avoid sharing pins with other peripherials unless you know what you are doing.</li>
+                    <li>Avoid pins that are <strong>input-only</strong> for outputs like CS, DC, or RST (some boards have a few ADC / input-only pins).</li>
+                    <li>Be careful with <strong>boot / strapping pins</strong>. They can still work, but the wrong level at reset can cause odd boot behavior.</li>
+                </ul>
+                <p>When in doubt, start from a known-good example for your board + panel, then change one pin at a time if needed.</p>
+
+
+                <h4>2. Display Class &amp; Driver Setup</h4>
+                <p>Make sure you have installed the <a href="https://github.com/ZinggJM/GxEPD2" target="_blank" rel="noopener" style="color:#4fc3f7;">GxEPD2</a> library, if you are using 4 grey display, use the <a href="https://github.com/ZinggJM/GxEPD2_4G" target="_blank" rel="noopener" style="color:#4fc3f7;">GxEPD2_4G</a> library.
+Select the correct display driver matching your panel controller (e.g. <code>GxEPD2_154_D67</code>) and color format header (<code>GxEPD2_BW</code>, <code>GxEPD2_3C</code>, <code>GxEPD2_4C</code>, <code>GxEPD2_7C</code>, etc.). Consult the GxEPD2 display selection header files for the driver class.</p>
+
+                <h4>3. Window Setup Must Happen Before <code>firstPage()</code></h4>
+                <p><code>setFullWindow()</code> or <code>setPartialWindow(x, y, w, h)</code> must be called <strong>before</strong> <code>firstPage()</code>. They configure the update region for the following paged draw loop. Calling them inside the <code>do { ... } while (nextPage())</code> body does not work as expected on hardware.</p>
+                <p>This live editor still draws shapes over the full canvas for layout preview — the dashed PartialWindow box is only a visual guide, not a clip region.</p>
+
+                <h4>4. Rotation</h4>
+                <p>Use <code>display.setRotation(1) // 0-3 </code> after <code>init()</code> to change drawing direction / swap logical width and height. This editor does not simulate rotation — set the toolbar W/H to match your rotated dimensions when previewing.</p>
+
+                <h4>5. Full Arduino Sketch Structure</h4>
+                <p>Paged drawing must occur inside a <code>firstPage()</code> / <code>nextPage()</code> loop. Always call display.powerOff() to power the panel down to avoid damaging the panel and saving power:</p>
+<pre>#include &lt;GxEPD2_BW.h&gt; // The display class e.g. BW/3C/4C/7C
+
+// CS, DC, RST, BUSY = free GPIOs (avoid input-only / awkward boot pins)
+// MOSI, SCK = hardware SPI pins (board-fixed)
+GxEPD2_BW&lt;GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT&gt; display(
+  GxEPD2_154_D67(/*CS=*/ 15, /*DC=*/ 27, /*RST=*/ 26, /*BUSY=*/ 25));
+
+void setup() {
+  display.init(115200, true, 2, false);
+  // display.setRotation(1); // optional: 0,1,2,3
+
+  display.setFullWindow();   // MUST be before firstPage()
+  // display.setPartialWindow(x, y, w, h); // alternative region
+
+  display.firstPage();
+  do {
+    // --- Paste Live Editor Output Here ---
+    display.fillScreen(GxEPD_WHITE);
+    display.setTextColor(GxEPD_BLACK);
+    display.setTextSize(1);
+    display.setCursor(10, 20);
+    display.print("Hello World!");
+  } while (display.nextPage());
+
+  display.powerOff(); // prevent burn-in / save power
+}
+
+void loop() {}</pre>
+            </div>
+            <div class="modal-footer">
+                <button class="header-btn" onclick="toggleGuideModal(false)">Close Guide</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal-overlay" id="about-modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <span>🦉 About this Editor</span>
+                <button onclick="toggleAboutModal(false)" style="background:none; border:none; color:white; font-size:1.2em; cursor:pointer;">✖</button>
+            </div>
+            <div class="modal-body">
+                <p>This is a standalone browser-based live preview editor for the <strong>GxEPD2</strong> library for use with e-paper / e-ink displays. Write code and the live viewer renders it while the parser warns you of syntax errors; or insert and draw on the canvas and get instant code for your display.</p>
+				
+
+                <h4>Features</h4>
+                <ul style="margin: 6px 0 8px 18px; padding: 0; line-height: 1.5;">
+                    <li>Live canvas preview for BW, 3-colour, 4-colour, 6-colour (Spectra) and 7-colour (ACeP) e-ink displays</li>
+                    <li>Supports most GxEPD2 / Adafruit_GFX drawing primitives, text, simple variables and for-loops (experimental)</li>
+					<li>Because the GxEPD2 underlying rendering is Adafruit_GFX, most of this tool should work for LCD displays using Adafruit_GFX as well (just change the colors)</li>
+                    <li>Drag objects on the canvas or edit them in the properties panel</li>
+<li>Insert objects directly with the insert tools</li>
+                    <li>Out-of-bounds, colour-compatibility and missing-setup warnings</li>
+                    <li>Export PNG, copy clean code (comments stripped) for your projects</li>
+                </ul>
+
+                <h4>GitHub / Source</h4>                
+                <pre id="about-github">https://github.com/mahbird/eink_liveview</pre>
+                <p>Built by <a href="https://github.com/mahbird/eink_liveview" target="_blank" rel="noopener" style="color:#4fc3f7;">mahbird</a> with Grok 4.5 / xAI assistance.</p>
+                
+
+                <h4>Credits &amp; License</h4>
+                <p>Built for use with the <a href="https://github.com/ZinggJM/GxEPD2" target="_blank" rel="noopener" style="color:#4fc3f7;">GxEPD2</a> library by Jean-Marc Zingg and the underlying <a href="https://github.com/adafruit/Adafruit-GFX-Library" target="_blank" rel="noopener" style="color:#4fc3f7;">Adafruit_GFX</a> library.</p>
+                <p>This editor itself is a single-file HTML tool distributed under GNU General Public License v3.0 (GPLv3), so derivatives must stay open-source and share the same freedoms.</p>
+
+                <h4>Known limitations</h4>
+                <ul style="margin: 6px 0 8px 18px; padding: 0; line-height: 1.5;">
+                    <li>Text uses approximate 5×7 GFX metrics and cannot fully emulate the GFX font; The text will look slightly different on the actual panel</li>
+<li>display.getTextBounds is not supported for the same reason</li>
+                    <li>Bitmaps are shown as labelled placeholders (no pixel data)</li>
+                    <li>Rotation, custom fonts, and full hardware init are not simulated — see the Guide</li>
+                    <li>Custom / user-defined functions are not supported (only the built-in GxEPD2 / GFX drawing commands, simple variables, and basic for/while loops)</li>
+                </ul>
+            </div>
+            <div class="modal-footer">
+                <button class="header-btn" onclick="toggleAboutModal(false)">Close</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+    const MAX_WIDTH = 2000;
+    const MAX_HEIGHT = 2000;
+
+    const colorHexMap = {
+        'GxEPD_BLACK': '#000000',
+        'GxEPD_WHITE': '#FFFFFF',
+        'GxEPD_DARKGREY': '#555555',
+        'GxEPD_LIGHTGREY': '#AAAAAA',
+        'GxEPD_RED': '#FF0000',
+        'GxEPD_GREEN': '#00FF00',
+        'GxEPD_BLUE': '#0000FF',
+        'GxEPD_YELLOW': '#FFCC00',
+        'GxEPD_ORANGE': '#FFA500'
+    };
+
+    const displayPalettes = {
+        'BW': ['GxEPD_BLACK', 'GxEPD_WHITE'],
+        '4GREY': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_DARKGREY', 'GxEPD_LIGHTGREY'],
+        'BWR': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_RED'],
+        'BWY': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_YELLOW'],
+        'BWRY': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_RED', 'GxEPD_YELLOW'],
+        'SPECTRA6': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_BLUE', 'GxEPD_GREEN', 'GxEPD_YELLOW', 'GxEPD_RED'],
+        'ACEP': ['GxEPD_BLACK', 'GxEPD_WHITE', 'GxEPD_RED', 'GxEPD_YELLOW', 'GxEPD_BLUE', 'GxEPD_GREEN', 'GxEPD_ORANGE']
+    };
+
+    const cmdSignatures = {
+        'fillScreen': { args: 1, sig: 'fillScreen(color)' },
+        'fillRect': { args: 5, sig: 'fillRect(x, y, w, h, color)' },
+        'drawRect': { args: 5, sig: 'drawRect(x, y, w, h, color)' },
+        'fillRoundRect': { args: 6, sig: 'fillRoundRect(x, y, w, h, r, color)' },
+        'drawRoundRect': { args: 6, sig: 'drawRoundRect(x, y, w, h, r, color)' },
+        'fillCircle': { args: 4, sig: 'fillCircle(x, y, r, color)' },
+        'drawCircle': { args: 4, sig: 'drawCircle(x, y, r, color)' },
+        'fillTriangle': { args: 7, sig: 'fillTriangle(x0, y0, x1, y1, x2, y2, color)' },
+        'drawTriangle': { args: 7, sig: 'drawTriangle(x0, y0, x1, y1, x2, y2, color)' },
+        'drawLine': { args: 5, sig: 'drawLine(x0, y0, x1, y1, color)' },
+        'drawFastHLine': { args: 4, sig: 'drawFastHLine(x, y, w, color)' },
+        'drawFastVLine': { args: 4, sig: 'drawFastVLine(x, y, h, color)' },
+        'drawPixel': { args: 3, sig: 'drawPixel(x, y, color)' },
+        'drawBitmap': { args: 6, sig: 'drawBitmap(x, y, bitmap, w, h, color)' },
+        'drawInvertedBitmap': { args: 6, sig: 'drawInvertedBitmap(x, y, bitmap, w, h, color)' },
+        'setCursor': { args: 2, sig: 'setCursor(x, y)' },
+        'setTextColor': { args: 1, sig: 'setTextColor(color) or setTextColor(color, background)' },
+        'setTextSize': { args: 1, sig: 'setTextSize(size)' },
+        'drawChar': { args: 6, sig: 'drawChar(x, y, c, color, background, size)' },
+        'print': { args: 1, sig: 'print("text")' },
+        'println': { args: 1, sig: 'println("text")' },
+        'setFullWindow': { args: 0, sig: 'setFullWindow()' },
+        'setPartialWindow': { args: 4, sig: 'setPartialWindow(x, y, w, h)' }
+    };
+
+    const initialCode = `display.fillScreen(GxEPD_WHITE);
+
+// Variables (resolved by the live parser)
+int margin = 10;
+int boxW = 70;
+int boxH = 40;
+
+// Bitmap placeholder (name only — no pixel data in the preview)
+display.drawBitmap(margin, margin, epd_logo, 60, 40, GxEPD_RED);
+
+// Shapes — one of each pair (fill / draw alternated)
+display.fillRect(80, margin, boxW, boxH, GxEPD_BLACK);
+display.drawRoundRect(160, margin, boxW, boxH, 8, GxEPD_BLUE);
+display.fillCircle(270, 30, 22, GxEPD_YELLOW);
+display.fillTriangle(80, 120, 110, 70, 140, 120, GxEPD_RED);
+
+// Lines & pixel
+display.drawLine(160, 70, 220, 120, GxEPD_BLUE);
+display.drawFastVLine(240, 70, 50, GxEPD_GREEN);
+display.drawPixel(260, 95, GxEPD_BLACK);
+
+// Experimental for-loop (FastHLines)
+for (int i = 0; i < 6; i++) {
+  display.drawFastHLine(display.width() / 2 - 30, display.height() / 2 + i * 8, 20 + i * 10, GxEPD_BLACK);
+}
+
+// width() / height() + text helpers
+display.setTextColor(GxEPD_BLACK);
+display.setTextSize(2);
+display.setCursor(margin + 100, display.height() - 80);
+display.print("Liveview Editor");
+display.setTextSize(1);
+display.setTextColor(GxEPD_RED);
+display.setCursor(margin + 120, display.height() - 50);
+display.println(" for GxEPD2 eink displays");
+`;
+
+
+    let drawObjects = [];
+    let selectedIndex = -1;
+    let selectedLineIdx = -1;
+    let codeLines = [];
+    let isDragging = false;
+    let dragHasMoved = false;
+    let dragStartX = 0, dragStartY = 0;
+    let dragOrigArgs = [];
+
+    // Resize handles (drawing-program style)
+    let isResizing = false;
+    let resizeHandleId = null;
+    let resizeOrigArgs = [];
+    const HANDLE_SIZE = 7; // hit target half-size in canvas pixels
+
+    let historyStack = [];
+    let historyIndex = -1;
+    let debounceTimer = null;
+
+    let textState = { color: 'GxEPD_BLACK', bg: null, sizeX: 1, sizeY: 1 };
+
+    /** Escape text for safe insertion into HTML */
+    function escapeHtml(str) {
+        return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    /** Quote-, paren-, and escape-aware argument splitter */
+    function splitArgs(str) {
+        const s = (str || '').trim();
+        if (!s) return [];
+        const args = [];
+        let cur = '';
+        let depth = 0;
+        let inStr = false;
+        let quote = '';
+        let isEscaped = false;
+
+        for (let i = 0; i < s.length; i++) {
+            const ch = s[i];
+            if (isEscaped) {
+                cur += ch;
+                isEscaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                cur += ch;
+                isEscaped = true;
+                continue;
+            }
+            if (inStr) {
+                cur += ch;
+                if (ch === quote) inStr = false;
+            } else if (ch === '"' || ch === "'") {
+                inStr = true;
+                quote = ch;
+                cur += ch;
+            } else if (ch === '(') {
+                depth++;
+                cur += ch;
+            } else if (ch === ')') {
+                depth--;
+                cur += ch;
+            } else if (ch === ',' && depth === 0) {
+                args.push(cur.trim());
+                cur = '';
+            } else {
+                cur += ch;
+            }
+        }
+        if (cur.trim() !== '' || s.endsWith(',')) args.push(cur.trim());
+        return args;
+    }
+
+    function resolveSelectionAfterRebuild() {
+        if (selectedLineIdx < 0) {
+            selectedIndex = -1;
+            return;
+        }
+        if (selectedIndex >= 0 && selectedIndex < drawObjects.length &&
+            drawObjects[selectedIndex].lineIdx === selectedLineIdx) {
+            return;
+        }
+        selectedIndex = -1;
+        for (let i = drawObjects.length - 1; i >= 0; i--) {
+            if (drawObjects[i].lineIdx === selectedLineIdx) {
+                selectedIndex = i;
+                break;
+            }
+        }
+    }
+
+    // Classic Adafruit GFX 5×7 font uses a 6×8 cell (1 px spacing).
+    // Layout / cursor advance / out-of-bounds use these exact metrics.
+    // Canvas rendering uses a slightly larger font (see FONT_RENDER_BOOST)
+    // so the visual size better matches sharp e-ink pixels.
+    function gfxCharW(sizeX) { return 6 * (sizeX || 1); }
+    function gfxCharH(sizeY) { return 8 * (sizeY || 1); }
+    const FONT_RENDER_BOOST = 1; // extra pixels for canvas font size only
+
+    function toggleGuideModal(show) {
+        document.getElementById('guide-modal').style.display = show ? 'flex' : 'none';
+    }
+
+    function toggleAboutModal(show) {
+        document.getElementById('about-modal').style.display = show ? 'flex' : 'none';
+    }
+
+    function stripCommentsFromCode(src) {
+        return src.split('\n').map(line => {
+            let out = '';
+            let inStr = false;
+            let quote = '';
+            let isEscaped = false;
+            for (let i = 0; i < line.length; i++) {
+                const ch = line[i];
+                if (isEscaped) {
+                    out += ch;
+                    isEscaped = false;
+                    continue;
+                }
+                if (ch === '\\') {
+                    out += ch;
+                    isEscaped = true;
+                    continue;
+                }
+                if (inStr) {
+                    out += ch;
+                    if (ch === quote) inStr = false;
+                } else if (ch === '"' || ch === "'") {
+                    inStr = true;
+                    quote = ch;
+                    out += ch;
+                } else if (ch === '/' && line[i + 1] === '/') {
+                    break;
+                } else {
+                    out += ch;
+                }
+            }
+            return out.replace(/\s+$/, '');
+        }).filter(line => line.trim() !== '').join('\n');
+    }
+
+    function copyCode() {
+        const raw = document.getElementById('code-input').value;
+        const code = stripCommentsFromCode(raw);
+        navigator.clipboard.writeText(code).then(() => {
+            const btn = document.getElementById('btn-copy-code');
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => btn.textContent = orig, 1500);
+        }).catch(() => {
+            const ta = document.createElement('textarea');
+            ta.value = code;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            const btn = document.getElementById('btn-copy-code');
+            const orig = btn.textContent;
+            btn.textContent = '✓ Copied!';
+            setTimeout(() => btn.textContent = orig, 1500);
+        });
+    }
+
+    function exportPNG() {
+        renderCanvas(true);
+        const canvas = document.getElementById('display-canvas');
+        const link = document.createElement('a');
+        link.download = `gxepd2_${canvas.width}x${canvas.height}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+        renderCanvas(false);
+    }
+
+    function updateZoom() {
+        const canvas = document.getElementById('display-canvas');
+        const zoom = parseFloat(document.getElementById('zoom-select').value) || 1;
+        const w = parseInt(document.getElementById('disp-w').value) || 400;
+        const h = parseInt(document.getElementById('disp-h').value) || 300;
+        canvas.style.width = `${w * zoom}px`;
+        canvas.style.height = `${h * zoom}px`;
+    }
+
+    function getCanvasCoords(e) {
+        const canvas = document.getElementById('display-canvas');
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * (canvas.width / rect.width),
+            y: (e.clientY - rect.top) * (canvas.height / rect.height)
+        };
+    }
+
+    function syncScroll() {
+        document.getElementById('line-numbers').scrollTop = document.getElementById('code-input').scrollTop;
+    }
+
+    function updateLineNumbers() {
+        const input = document.getElementById('code-input');
+        const lines = input.value.split('\n');
+        const activeLineIdx = selectedLineIdx;
+        
+        let html = '';
+        for (let i = 0; i < lines.length; i++) {
+            let isActive = (i === activeLineIdx);
+            html += `<div class="line-num ${isActive ? 'active-line' : ''}" style="cursor:pointer;" onclick="selectByLine(${i})">${i + 1}</div>`;
+        }
+        document.getElementById('line-numbers').innerHTML = html;
+        syncScroll();
+    }
+
+    function selectByLine(i) {
+        selectedLineIdx = i;
+        selectedIndex = -1;
+        processCode(false);
+    }
+
+    function saveHistoryState() {
+        const currentCode = document.getElementById('code-input').value;
+        if (historyIndex >= 0 && historyStack[historyIndex] === currentCode) return;
+        
+        historyStack = historyStack.slice(0, historyIndex + 1);
+        historyStack.push(currentCode);
+        historyIndex++;
+        
+        updateUndoRedoButtons();
+    }
+
+    function undo() {
+        if (historyIndex > 0) {
+            historyIndex--;
+            document.getElementById('code-input').value = historyStack[historyIndex];
+            processCode(false);
+            updateUndoRedoButtons();
+        }
+    }
+
+    function redo() {
+        if (historyIndex < historyStack.length - 1) {
+            historyIndex++;
+            document.getElementById('code-input').value = historyStack[historyIndex];
+            processCode(false);
+            updateUndoRedoButtons();
+        }
+    }
+
+    function updateUndoRedoButtons() {
+        document.getElementById('btn-undo').disabled = historyIndex <= 0;
+        document.getElementById('btn-redo').disabled = historyIndex >= historyStack.length - 1;
+    }
+
+    function clearCanvas() {
+        if (!confirm('Clear all drawing code and reset the canvas?\n\nYou can still use Undo to undo this clear. ')) {
+            return;
+        }
+        document.getElementById('code-input').value = 'display.fillScreen(GxEPD_WHITE);\n';
+        selectedIndex = -1;
+        selectedLineIdx = -1;
+        isDragging = false;
+        isResizing = false;
+        processCode(true);
+    }
+
+    function onCodeInput() {
+        processCode(false);
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            saveHistoryState();
+        }, 400);
+    }
+
+    function normalizeColorToken(name) {
+        const t = (name || '').trim();
+        if (colorHexMap[t]) return t;
+        if (/^GxEPD2_[A-Z]+$/.test(t)) {
+            const alt = 'GxEPD_' + t.slice(7);
+            if (colorHexMap[alt]) return alt;
+        }
+        if (/^GxEPD_[A-Z]+$/.test(t)) {
+            const alt = 'GxEPD2_' + t.slice(6);
+            if (colorHexMap[alt]) return alt;
+        }
+        return t;
+    }
+
+    /** Safe recursive-descent math & boolean expression parser */
+    function safeEvalMath(expr) {
+        let tokens = expr.match(/\d+(?:\.\d+)?|&&|\|\||<=|>=|==|!=|[+\-*/()<>!]|true|false/g);
+        if (!tokens) return null;
+
+        let index = 0;
+
+        function parsePrimary() {
+            let token = tokens[index++];
+            if (token === '(') {
+                let val = parseLogicalOr();
+                if (tokens[index++] !== ')') return null;
+                return val;
+            }
+            if (token === '!') return !parsePrimary();
+            if (token === '-') return -parsePrimary();
+            if (token === '+') return parsePrimary();
+            if (token === 'true') return true;
+            if (token === 'false') return false;
+            let num = parseFloat(token);
+            return isNaN(num) ? null : num;
+        }
+
+        function parseTerm() {
+            let left = parsePrimary();
+            while (index < tokens.length && (tokens[index] === '*' || tokens[index] === '/')) {
+                let op = tokens[index++];
+                let right = parsePrimary();
+                if (left === null || right === null) return null;
+                left = (op === '*') ? left * right : (right !== 0 ? left / right : 0);
+            }
+            return left;
+        }
+
+        function parseExpr() {
+            let left = parseTerm();
+            while (index < tokens.length && (tokens[index] === '+' || tokens[index] === '-')) {
+                let op = tokens[index++];
+                let right = parseTerm();
+                if (left === null || right === null) return null;
+                left = (op === '+') ? left + right : left - right;
+            }
+            return left;
+        }
+
+        function parseCompare() {
+            let left = parseExpr();
+            while (index < tokens.length && ['<', '>', '<=', '>=', '==', '!='].includes(tokens[index])) {
+                let op = tokens[index++];
+                let right = parseExpr();
+                if (left === null || right === null) return null;
+                if (op === '<') left = left < right;
+                else if (op === '>') left = left > right;
+                else if (op === '<=') left = left <= right;
+                else if (op === '>=') left = left >= right;
+                else if (op === '==') left = left == right;
+                else if (op === '!=') left = left != right;
+            }
+            return left;
+        }
+
+        function parseLogicalAnd() {
+            let left = parseCompare();
+            while (index < tokens.length && tokens[index] === '&&') {
+                index++;
+                let right = parseCompare();
+                if (left === null || right === null) return null;
+                left = left && right;
+            }
+            return left;
+        }
+
+        function parseLogicalOr() {
+            let left = parseLogicalAnd();
+            while (index < tokens.length && tokens[index] === '||') {
+                index++;
+                let right = parseLogicalAnd();
+                if (left === null || right === null) return null;
+                left = left || right;
+            }
+            return left;
+        }
+
+        let result = parseLogicalOr();
+        return index === tokens.length ? result : null;
+    }
+
+    function evaluateExpression(expr, vars) {
+        try {
+            let safeExpr = (expr || '').trim();
+            if (!safeExpr) return null;
+
+            const asColor = normalizeColorToken(safeExpr);
+            if (colorHexMap[asColor]) return asColor;
+
+            const names = Object.keys(vars).sort((a, b) => b.length - a.length);
+            for (const v of names) {
+                safeExpr = safeExpr.replace(new RegExp(`\\b${v}\\b`, 'g'), String(vars[v]));
+            }
+            safeExpr = safeExpr.replace(/display\.width\(\)/g, document.getElementById('disp-w').value);
+            safeExpr = safeExpr.replace(/display\.height\(\)/g, document.getElementById('disp-h').value);
+
+            const asColorPostSub = normalizeColorToken(safeExpr);
+            if (colorHexMap[asColorPostSub]) return asColorPostSub;
+
+            safeExpr = safeExpr.replace(/\b(int|uint8_t|uint16_t|float|long|String)\b/g, '');
+
+            return safeEvalMath(safeExpr);
+        } catch (e) { return null; }
+    }
+
+    function resolveColor(colorConst) {
+        const activeClass = document.getElementById('disp-class').value;
+        const validColors = displayPalettes[activeClass] || displayPalettes['BW'];
+        
+        let rawName = normalizeColorToken(String(colorConst == null ? '' : colorConst));
+        if (!colorHexMap[rawName]) {
+            let foundKey = Object.keys(colorHexMap).find(k => colorHexMap[k] === colorConst);
+            if (foundKey) rawName = foundKey;
+        }
+
+        let isSupported = validColors.includes(rawName);
+        let renderHex = isSupported ? (colorHexMap[rawName] || '#000000') : '#000000';
+        
+        return {
+            hex: renderHex,
+            colorName: rawName,
+            isSupported: isSupported,
+            activeClass: activeClass,
+            supportedList: validColors.join(', ')
+        };
+    }
+
+    function isOutOfBounds(cmd, args, textWidth = 0, textHeight = 12) {
+        const W = parseInt(document.getElementById('disp-w').value);
+        const H = parseInt(document.getElementById('disp-h').value);
+
+        if (['fillRect', 'drawRect', 'setPartialWindow', 'fillRoundRect', 'drawRoundRect'].includes(cmd)) {
+            return args[0] < 0 || args[1] < 0 || (args[0] + args[2]) > W || (args[1] + args[3]) > H;
+        } else if (['drawBitmap', 'drawInvertedBitmap'].includes(cmd)) {
+            return args[0] < 0 || args[1] < 0 || (args[0] + args[3]) > W || (args[1] + args[4]) > H;
+        } else if (['fillCircle', 'drawCircle'].includes(cmd)) {
+            const r = args[2];
+            return (args[0] - r) < 0 || (args[1] - r) < 0 || (args[0] + r) > W || (args[1] + r) > H;
+        } else if (['fillTriangle', 'drawTriangle'].includes(cmd)) {
+            return args[0] < 0 || args[0] > W || args[1] < 0 || args[1] > H ||
+                   args[2] < 0 || args[2] > W || args[3] < 0 || args[3] > H ||
+                   args[4] < 0 || args[4] > W || args[5] < 0 || args[5] > H;
+        } else if (cmd === 'drawLine') {
+            return args[0] < 0 || args[0] > W || args[1] < 0 || args[1] > H ||
+                   args[2] < 0 || args[2] > W || args[3] < 0 || args[3] > H;
+        } else if (cmd === 'drawFastHLine') {
+            return args[0] < 0 || args[1] < 0 || args[1] >= H || (args[0] + args[2]) > W;
+        } else if (cmd === 'drawFastVLine') {
+            return args[0] < 0 || args[1] < 0 || args[0] >= W || (args[1] + args[2]) > H;
+        } else if (cmd === 'drawPixel') {
+            return args[0] < 0 || args[1] < 0 || args[0] >= W || args[1] >= H;
+        } else if (['print', 'println'].includes(cmd)) {
+            return args[0] < 0 || args[1] < 0 || (args[0] + textWidth) > W || (args[1] + textHeight) > H;
+        }
+        return false;
+    }
+
+    function parseSingleCommandLine(line, lineIdx, vars, currentCursor, ctx, _selectedLineIdx, isLoopGenerated = false, textTracker = { hasSetCursor: false, hasSetTextColor: false, hasSetTextSize: false }) {
+        let colorWarning = '', outOfBoundsWarn = '', infoHint = '';
+        let missingSemicolon = !line.endsWith(';');
+        let textWarns = [];
+
+        // Allow optional whitespace around '.'/'->', method name, and parentheses (valid C++ style)
+        let cmdMatch = line.match(/display(?:\s*\.\s*|\s*->\s*)([a-zA-Z0-9_]+)\s*\((.*)\)\s*;?/);
+        if (!cmdMatch) return { isError: true, errMsg: "Malformed display command." };
+
+        let cmd = cmdMatch[1];
+        let argsRawStr = cmdMatch[2].trim();
+        let argsRaw = splitArgs(argsRawStr);
+
+        if (cmd === 'setRotation') {
+            return {
+                isError: false,
+                missingSemicolon,
+                infoHint: 'ℹ️ setRotation is not simulated here. It swaps drawing axes on hardware — set toolbar W/H to the rotated size.'
+            };
+        }
+        if (cmd === 'setFont' || cmd === 'setTextWrap') {
+            return {
+                isError: false,
+                missingSemicolon,
+                infoHint: `ℹ️ ${cmd} is not simulated (preview uses default GFX 5×7 font metrics).`
+            };
+        }
+
+        if (!cmdSignatures[cmd]) {
+            return { isError: true, errMsg: `Unknown command: ${cmd}` };
+        }
+        if (argsRaw.length < cmdSignatures[cmd].args) {
+            return { isError: true, errMsg: `Missing arguments. Format: ${cmdSignatures[cmd].sig}` };
+        }
+
+        let args = argsRaw.map((a, idx) => {
+            const trimmed = a.trim();
+            // Prefer string literals first so content like "GxEPD2..." or "1+1" is never eval'd as math/color
+            if ((trimmed.startsWith('"') && trimmed.endsWith('"') && trimmed.length >= 2) ||
+                (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2)) {
+                return trimmed.slice(1, -1).replace(/\\(['"\\])/g, '$1');
+            }
+            const asColor = normalizeColorToken(trimmed);
+            if (colorHexMap[asColor]) return asColor;
+            let ev = evaluateExpression(a, vars);
+            if (ev !== null) return ev;
+            if (['drawBitmap', 'drawInvertedBitmap'].includes(cmd) && idx === 2) return trimmed;
+            if (cmd === 'drawChar' && idx === 2) {
+                const m = trimmed.match(/^'(.)'$/);
+                if (m) return m[1];
+                if (trimmed.length === 1) return trimmed;
+            }
+            if (/^[a-zA-Z_]\w*$/.test(trimmed)) return trimmed;
+            return null;
+        });
+
+        if (args.includes(null)) {
+            return { isError: true, errMsg: `Unparseable arguments. Format: ${cmdSignatures[cmd].sig}` };
+        }
+
+        if (cmd === 'setTextColor') {
+            textTracker.hasSetTextColor = true;
+            textState.color = argsRaw[0].trim();
+            textState.bg = argsRaw.length >= 2 ? argsRaw[1].trim() : null;
+            let colorRes = resolveColor(textState.color);
+            if (!colorRes.isSupported) {
+                colorWarning = `⚠️ '${colorRes.colorName}' unsupported in ${colorRes.activeClass}. Rendered as BLACK.`;
+            }
+            return { isError: false, missingSemicolon, colorWarning, outOfBoundsWarn, infoHint, textWarns };
+        }
+        if (cmd === 'setTextSize') {
+            textTracker.hasSetTextSize = true;
+            const s = Math.max(1, parseInt(args[0], 10) || 1);
+            textState.sizeX = s;
+            textState.sizeY = s;
+            return { isError: false, missingSemicolon, colorWarning, outOfBoundsWarn, infoHint, textWarns };
+        }
+        if (cmd === 'setFullWindow') {
+            return { isError: false, missingSemicolon, colorWarning, outOfBoundsWarn,
+                infoHint: 'ℹ️ setFullWindow() must be called before firstPage() on hardware (not simulated as a clip).' };
+        }
+
+        let obj = { lineIdx: lineIdx, cmd: cmd, args: args, rawArgs: argsRaw, isLoopGenerated: isLoopGenerated };
+
+        if (['fillScreen', 'fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'fillCircle', 'drawCircle',
+             'fillTriangle', 'drawTriangle', 'drawLine', 'drawFastHLine',
+             'drawFastVLine', 'drawPixel', 'drawBitmap', 'drawInvertedBitmap', 'drawChar'].includes(cmd)) {
+            let colorIdx = (cmd === 'drawChar') ? 3 : (args.length - 1);
+            let colorRes = resolveColor(argsRaw[colorIdx]);
+            if (!colorRes.isSupported) {
+                colorWarning = `⚠️ '${colorRes.colorName}' unsupported in ${colorRes.activeClass}. Rendered as BLACK.`;
+            }
+        }
+
+        if (!['print', 'println', 'setCursor', 'fillScreen', 'setPartialWindow'].includes(cmd)) {
+            if (isOutOfBounds(cmd, args)) {
+                outOfBoundsWarn = `⚠️ Out of bounds! Object extends outside canvas display limits.`;
+            }
+        }
+
+        if (cmd === 'setCursor') {
+            textTracker.hasSetCursor = true;
+            currentCursor.x = args[0];
+            currentCursor.y = args[1];
+            currentCursor.lineIdx = lineIdx;
+            currentCursor.printCount = 0;
+        } else if (cmd === 'print' || cmd === 'println') {
+            if (!textTracker.hasSetCursor) {
+                textWarns.push("⚠️ Missing setCursor() before print — position defaulted to (0,0).");
+            }
+            if (!textTracker.hasSetTextColor) {
+                textWarns.push("⚠️ Missing setTextColor() before print — color defaulted to GxEPD_BLACK.");
+            }
+            if (!textTracker.hasSetTextSize) {
+                textWarns.push("⚠️ Missing setTextSize() before print — text size defaulted to 1.");
+            }
+            textWarns.push("💡 Note: Real e-ink glyphs & spacing will differ slightly on actual display.");
+
+            let textStr = String(args[0]);
+            let sx = textState.sizeX, sy = textState.sizeY;
+            let textWidth = gfxCharW(sx) * textStr.length;
+            let textHeight = gfxCharH(sy);
+
+            currentCursor.printCount++;
+
+            obj.x = currentCursor.x;
+            obj.y = currentCursor.y;
+            obj.text = textStr;
+            obj.width = textWidth;
+            obj.height = textHeight;
+            obj.cursorLineIdx = currentCursor.lineIdx;
+            obj.textColor = textState.color;
+            obj.textBg = textState.bg;
+            obj.sizeX = sx;
+            obj.sizeY = sy;
+            obj.hasDedicatedCursor = (currentCursor.lineIdx !== -1 && currentCursor.printCount === 1);
+
+            if (isOutOfBounds(cmd, [obj.x, obj.y], textWidth, textHeight)) {
+                outOfBoundsWarn = `⚠️ Out of bounds! Text extends outside canvas display limits.`;
+            }
+
+            if (cmd === 'println') {
+                currentCursor.x = 0;
+                currentCursor.y += textHeight;
+            } else {
+                currentCursor.x += textWidth;
+            }
+        } else if (cmd === 'drawChar') {
+            let ch = String(args[2]);
+            if (ch.length > 1) ch = ch.charAt(0);
+            let sx = Math.max(1, parseInt(args[5], 10) || 1);
+            obj.char = ch;
+            obj.sizeX = sx;
+            obj.sizeY = sx;
+            obj.width = gfxCharW(sx);
+            obj.height = gfxCharH(sx);
+            if (isOutOfBounds('print', [args[0], args[1]], obj.width, obj.height)) {
+                outOfBoundsWarn = `⚠️ Out of bounds! Character extends outside canvas display limits.`;
+            }
+        }
+
+        drawObjects.push(obj);
+
+        return {
+            isError: false,
+            missingSemicolon: missingSemicolon,
+            colorWarning: colorWarning,
+            outOfBoundsWarn: outOfBoundsWarn,
+            infoHint: infoHint,
+            textWarns: textWarns
+        };
+    }
+
+    function processCode(shouldSaveHistory = false, skipPropsPanel = false) {
+        if (isDragging || isResizing) return;
+        
+        const wInput = document.getElementById('disp-w');
+        const hInput = document.getElementById('disp-h');
+        
+        let wVal = parseInt(wInput.value) || 400;
+        let hVal = parseInt(hInput.value) || 300;
+        
+        if (wVal > MAX_WIDTH) wVal = MAX_WIDTH;
+        if (wVal < 1) wVal = 1;
+        if (hVal > MAX_HEIGHT) hVal = MAX_HEIGHT;
+        if (hVal < 1) hVal = 1;
+
+        wInput.value = wVal;
+        hInput.value = hVal;
+
+        const canvas = document.getElementById('display-canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = wVal;
+        canvas.height = hVal;
+        updateZoom();
+        
+        codeLines = document.getElementById('code-input').value.split('\n');
+        const highlightLine = selectedLineIdx;
+        
+        let outHtml = '';
+        drawObjects = [];
+        let vars = {};
+        let currentCursor = { x: 0, y: 0, lineIdx: -1, printCount: 0 };
+        textState = { color: 'GxEPD_BLACK', bg: null, sizeX: 1, sizeY: 1 };
+        let textTracker = { hasSetCursor: false, hasSetTextColor: false, hasSetTextSize: false };
+        let sawDrawable = false;
+        let fillScreenWasFirst = false;
+
+        for (let i = 0; i < codeLines.length; i++) {
+            let line = codeLines[i].trim();
+            {
+                let cleaned = '';
+                let inS = false, q = '', isEsc = false;
+                for (let ci = 0; ci < line.length; ci++) {
+                    const ch = line[ci];
+                    if (isEsc) {
+                        cleaned += ch;
+                        isEsc = false;
+                        continue;
+                    }
+                    if (ch === '\\') {
+                        cleaned += ch;
+                        isEsc = true;
+                        continue;
+                    }
+                    if (inS) {
+                        cleaned += ch;
+                        if (ch === q) inS = false;
+                    } else if (ch === '"' || ch === "'") {
+                        inS = true; q = ch; cleaned += ch;
+                    } else if (ch === '/' && line[ci + 1] === '/') {
+                        break;
+                    } else cleaned += ch;
+                }
+                line = cleaned.trim();
+            }
+            let isSelectedLine = (i === highlightLine);
+
+            if (!line) { 
+                outHtml += `<div class="${isSelectedLine ? 'line-selected' : ''}"><br></div>`; 
+                continue; 
+            }
+
+            let varMatch = line.match(/^(?:int|uint8_t|uint16_t|float|long)?\s*([a-zA-Z_]\w*)\s*=\s*(.+);/);
+            if (varMatch && !line.startsWith('display.')) {
+                let val = evaluateExpression(varMatch[2], vars);
+                if (val !== null) vars[varMatch[1]] = val;
+                outHtml += `<div class="line-ignored ${isSelectedLine ? 'line-selected' : ''}">${escapeHtml(line)}</div>`;
+                continue;
+            }
+
+            let forMatch = line.match(/^for\s*\(\s*(?:int|uint8_t|uint16_t|float|long)?\s*([a-zA-Z_]\w*)\s*=\s*(.*?);\s*(.*?);\s*(.*?)\)\s*\{?/);
+            let whileMatch = line.match(/^while\s*\((.*?)\)\s*\{?/);
+
+            if (forMatch || whileMatch) {
+                let iterVar = forMatch ? forMatch[1] : null;
+                let initVal = forMatch ? evaluateExpression(forMatch[2], vars) : null;
+                let condExpr = forMatch ? forMatch[3] : whileMatch[1];
+                let stepStr = forMatch ? forMatch[4].trim() : '';
+
+                let blockLines = [];
+                let j = i + 1;
+                let braceCount = line.includes('{') ? 1 : 0;
+
+                if (!line.includes('{') && j < codeLines.length && codeLines[j].trim() === '{') {
+                    braceCount = 1; j++;
+                }
+
+                while (j < codeLines.length) {
+                    let lTrim = codeLines[j].trim();
+                    if (lTrim === '{') { braceCount++; j++; continue; }
+                    if (lTrim === '}') {
+                        braceCount--;
+                        if (braceCount <= 0) break;
+                    }
+                    if (braceCount > 0 || !line.includes('{')) {
+                        blockLines.push({ line: lTrim, origIdx: j });
+                        if (!line.includes('{')) break;
+                    }
+                    j++;
+                }
+
+                outHtml += `<div class="line-parsed ${isSelectedLine ? 'line-selected' : ''}">${escapeHtml(line)}</div>`;
+
+                blockLines.forEach(bl => {
+                    let isSubSelected = (bl.origIdx === selectedLineIdx);
+                    outHtml += `<div class="line-loop-child ${isSubSelected ? 'line-selected' : ''}">↳ ${escapeHtml(bl.line)}</div>`;
+                });
+
+                let maxIter = 200, loopIter = 0;
+                let loopVars = { ...vars };
+                if (iterVar && initVal !== null) loopVars[iterVar] = initVal;
+
+                while (evaluateExpression(condExpr, loopVars) && loopIter < maxIter) {
+                    for (let b = 0; b < blockLines.length; b++) {
+                        let bl = blockLines[b];
+                        if (bl.line.startsWith('display.')) {
+                            parseSingleCommandLine(bl.line, bl.origIdx, loopVars, currentCursor, ctx, selectedLineIdx, true, textTracker);
+                        } else {
+                            let subVar = bl.line.match(/^(?:int|uint8_t|uint16_t|float|long)?\s*([a-zA-Z_]\w*)\s*=\s*(.+);/);
+                            if (subVar) {
+                                let vval = evaluateExpression(subVar[2], loopVars);
+                                if (vval !== null) loopVars[subVar[1]] = vval;
+                            }
+                        }
+                    }
+
+                    if (forMatch) {
+                        if (stepStr.includes('++')) loopVars[iterVar]++;
+                        else if (stepStr.includes('--')) loopVars[iterVar]--;
+                        else if (stepStr.includes('+=')) loopVars[iterVar] += (evaluateExpression(stepStr.split('+=')[1], loopVars) || 1);
+                        else if (stepStr.includes('-=')) loopVars[iterVar] -= (evaluateExpression(stepStr.split('-=')[1], loopVars) || 1);
+                        else if (stepStr.includes('=')) {
+                            let rhs = stepStr.split('=')[1];
+                            let nval = evaluateExpression(rhs, loopVars);
+                            if (nval !== null) loopVars[iterVar] = nval;
+                        }
+                    }
+
+                    loopIter++;
+                }
+
+                for (let key in vars) {
+                    if (Object.prototype.hasOwnProperty.call(loopVars, key)) {
+                        vars[key] = loopVars[key];
+                    }
+                }
+
+                if (loopIter >= maxIter) {
+                    outHtml += `<span class="warn-hint">↳ ⚠️ Safety stop: Loop halted after ${maxIter} iterations.</span>`;
+                }
+
+                i = j;
+                continue;
+            }
+
+            if (line.startsWith('display.') || line.startsWith('display->')) {
+                let res = parseSingleCommandLine(line, i, vars, currentCursor, ctx, highlightLine, false, textTracker);
+                if (res.isError) {
+                    outHtml += `<div class="line-error ${isSelectedLine ? 'line-selected' : ''}">(!) ${escapeHtml(line)}</div><span class="err-hint">↳ ${escapeHtml(res.errMsg)}</span>`;
+                } else {
+                    outHtml += `<div class="line-parsed ${isSelectedLine ? 'line-selected' : ''}">${escapeHtml(line)}</div>`;
+                    if (res.missingSemicolon) outHtml += `<span class="warn-hint">↳ ⚠️ Missing trailing semicolon ';'</span>`;
+                    if (res.colorWarning) outHtml += `<span class="warn-hint">↳ ${escapeHtml(res.colorWarning)}</span>`;
+                    if (res.outOfBoundsWarn) outHtml += `<span class="warn-hint">↳ ${escapeHtml(res.outOfBoundsWarn)}</span>`;
+                    if (res.infoHint) outHtml += `<span class="warn-hint">↳ ${escapeHtml(res.infoHint)}</span>`;
+                    if (res.textWarns && res.textWarns.length > 0) {
+                        res.textWarns.forEach(tw => {
+                            outHtml += `<span class="warn-hint">↳ ${escapeHtml(tw)}</span>`;
+                        });
+                    }
+
+                    const m = line.match(/display(?:\.|->)([a-zA-Z0-9_]+)\(/);
+                    if (m) {
+                        const c = m[1];
+                        const isDraw = !['setCursor', 'setTextColor', 'setTextSize', 'setFullWindow', 'setPartialWindow', 'setRotation', 'setFont', 'setTextWrap'].includes(c);
+                        if (isDraw) {
+                            if (!sawDrawable && c === 'fillScreen') fillScreenWasFirst = true;
+                            sawDrawable = true;
+                        }
+                    }
+                }
+            } else {
+                outHtml += `<div class="line-ignored ${isSelectedLine ? 'line-selected' : ''}">${escapeHtml(line)}</div>`;
+            }
+        }
+
+        if (sawDrawable && !fillScreenWasFirst) {
+            outHtml = `<span class="warn-hint">💡 Tip: start with display.fillScreen(...) so the panel background matches hardware.</span>` + outHtml;
+        }
+        
+        document.getElementById('parsed-code').innerHTML = outHtml;
+        resolveSelectionAfterRebuild();
+        updateLineNumbers();
+        renderCanvas();
+        if (!skipPropsPanel) updatePropertiesPanel();
+
+        if (shouldSaveHistory) {
+            saveHistoryState();
+        }
+    }
+
+    function drawGrid(ctx, width, height, gridSize) {
+        if (gridSize === 'none') return;
+        const size = parseInt(gridSize);
+        if (!size || size <= 0) return;
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.strokeStyle = 'rgba(0, 120, 215, 0.35)';
+        ctx.lineWidth = 1;
+
+        for (let x = size; x < width; x += size) {
+            ctx.moveTo(x + 0.5, 0);
+            ctx.lineTo(x + 0.5, height);
+        }
+        for (let y = size; y < height; y += size) {
+            ctx.moveTo(0, y + 0.5);
+            ctx.lineTo(width, y + 0.5);
+        }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    /** Return resize handles for a drawable object. Each: { id, x, y }. */
+    function getResizeHandles(obj) {
+        if (!obj || obj.isLoopGenerated) return [];
+        const a = obj.args;
+        if (['fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'setPartialWindow'].includes(obj.cmd)) {
+            const x = a[0], y = a[1], w = a[2], h = a[3];
+            return [
+                { id: 'nw', x: x, y: y }, { id: 'n', x: x + w / 2, y: y }, { id: 'ne', x: x + w, y: y },
+                { id: 'e', x: x + w, y: y + h / 2 }, { id: 'se', x: x + w, y: y + h },
+                { id: 's', x: x + w / 2, y: y + h }, { id: 'sw', x: x, y: y + h }, { id: 'w', x: x, y: y + h / 2 }
+            ];
+        }
+        if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+            const x = a[0], y = a[1], w = a[3], h = a[4];
+            return [
+                { id: 'nw', x: x, y: y }, { id: 'n', x: x + w / 2, y: y }, { id: 'ne', x: x + w, y: y },
+                { id: 'e', x: x + w, y: y + h / 2 }, { id: 'se', x: x + w, y: y + h },
+                { id: 's', x: x + w / 2, y: y + h }, { id: 'sw', x: x, y: y + h }, { id: 'w', x: x, y: y + h / 2 }
+            ];
+        }
+        if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+            const cx = a[0], cy = a[1], r = a[2];
+            return [
+                { id: 'c-n', x: cx, y: cy - r }, { id: 'c-e', x: cx + r, y: cy },
+                { id: 'c-s', x: cx, y: cy + r }, { id: 'c-w', x: cx - r, y: cy }
+            ];
+        }
+        if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+            return [
+                { id: 'v0', x: a[0], y: a[1] },
+                { id: 'v1', x: a[2], y: a[3] },
+                { id: 'v2', x: a[4], y: a[5] }
+            ];
+        }
+        if (obj.cmd === 'drawLine') {
+            return [
+                { id: 'p0', x: a[0], y: a[1] },
+                { id: 'p1', x: a[2], y: a[3] }
+            ];
+        }
+        if (obj.cmd === 'drawFastHLine') {
+            return [
+                { id: 'h0', x: a[0], y: a[1] },
+                { id: 'h1', x: a[0] + a[2], y: a[1] }
+            ];
+        }
+        if (obj.cmd === 'drawFastVLine') {
+            return [
+                { id: 'vstart', x: a[0], y: a[1] },
+                { id: 'vend', x: a[0], y: a[1] + a[2] }
+            ];
+        }
+        return [];
+    }
+
+    function drawResizeHandles(ctx, obj) {
+        const handles = getResizeHandles(obj);
+        if (!handles.length) return;
+        const hs = HANDLE_SIZE;
+        ctx.save();
+        handles.forEach(h => {
+            ctx.fillStyle = '#ffffff';
+            ctx.strokeStyle = '#007acc';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([]);
+            ctx.fillRect(h.x - hs / 2, h.y - hs / 2, hs, hs);
+            ctx.strokeRect(h.x - hs / 2, h.y - hs / 2, hs, hs);
+        });
+        ctx.restore();
+    }
+
+    function hitTestHandle(obj, x, y) {
+        const handles = getResizeHandles(obj);
+        const hs = HANDLE_SIZE + 2;
+        for (let i = handles.length - 1; i >= 0; i--) {
+            const h = handles[i];
+            if (Math.abs(x - h.x) <= hs / 2 && Math.abs(y - h.y) <= hs / 2) return h.id;
+        }
+        return null;
+    }
+
+    /** Apply resize for handle id; mutates obj.args in place. Uses resizeOrigArgs + mouse. */
+    function applyResize(obj, handleId, mouseX, mouseY) {
+        const o = resizeOrigArgs;
+        const a = obj.args;
+        const clampMin = 1;
+
+        if (['fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'setPartialWindow'].includes(obj.cmd)) {
+            let x = o[0], y = o[1], w = o[2], h = o[3];
+            const r = o[4]; // round radius if present
+            if (handleId === 'n' || handleId === 'ne' || handleId === 'nw') {
+                const bottom = o[1] + o[3];
+                y = Math.round(mouseY);
+                h = Math.max(clampMin, bottom - y);
+            }
+            if (handleId === 's' || handleId === 'se' || handleId === 'sw') {
+                y = o[1];
+                h = Math.max(clampMin, Math.round(mouseY) - y);
+            }
+            if (handleId === 'w' || handleId === 'nw' || handleId === 'sw') {
+                const right = o[0] + o[2];
+                x = Math.round(mouseX);
+                w = Math.max(clampMin, right - x);
+            }
+            if (handleId === 'e' || handleId === 'ne' || handleId === 'se') {
+                x = o[0];
+                w = Math.max(clampMin, Math.round(mouseX) - x);
+            }
+            a[0] = x; a[1] = y; a[2] = w; a[3] = h;
+            if (obj.cmd.includes('RoundRect') && r != null) a[4] = r;
+            return;
+        }
+
+        if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+            let x = o[0], y = o[1], w = o[3], h = o[4];
+            if (handleId === 'n' || handleId === 'ne' || handleId === 'nw') {
+                const bottom = o[1] + o[4];
+                y = Math.round(mouseY);
+                h = Math.max(clampMin, bottom - y);
+            }
+            if (handleId === 's' || handleId === 'se' || handleId === 'sw') {
+                y = o[1];
+                h = Math.max(clampMin, Math.round(mouseY) - y);
+            }
+            if (handleId === 'w' || handleId === 'nw' || handleId === 'sw') {
+                const right = o[0] + o[3];
+                x = Math.round(mouseX);
+                w = Math.max(clampMin, right - x);
+            }
+            if (handleId === 'e' || handleId === 'ne' || handleId === 'se') {
+                x = o[0];
+                w = Math.max(clampMin, Math.round(mouseX) - x);
+            }
+            a[0] = x; a[1] = y; a[3] = w; a[4] = h;
+            return;
+        }
+
+        if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+            const cx = o[0], cy = o[1];
+            const r = Math.max(1, Math.round(Math.hypot(mouseX - cx, mouseY - cy)));
+            a[0] = cx; a[1] = cy; a[2] = r;
+            return;
+        }
+
+        if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+            if (handleId === 'v0') { a[0] = Math.round(mouseX); a[1] = Math.round(mouseY); }
+            else if (handleId === 'v1') { a[2] = Math.round(mouseX); a[3] = Math.round(mouseY); }
+            else if (handleId === 'v2') { a[4] = Math.round(mouseX); a[5] = Math.round(mouseY); }
+            return;
+        }
+
+        if (obj.cmd === 'drawLine') {
+            if (handleId === 'p0') { a[0] = Math.round(mouseX); a[1] = Math.round(mouseY); }
+            else if (handleId === 'p1') { a[2] = Math.round(mouseX); a[3] = Math.round(mouseY); }
+            return;
+        }
+
+        if (obj.cmd === 'drawFastHLine') {
+            if (handleId === 'h0') {
+                const end = o[0] + o[2];
+                a[0] = Math.round(mouseX);
+                a[2] = Math.max(1, end - a[0]);
+                a[1] = o[1];
+            } else if (handleId === 'h1') {
+                a[0] = o[0];
+                a[1] = o[1];
+                a[2] = Math.max(1, Math.round(mouseX) - o[0]);
+            }
+            return;
+        }
+
+        if (obj.cmd === 'drawFastVLine') {
+            if (handleId === 'vstart') {
+                const end = o[1] + o[2];
+                a[1] = Math.round(mouseY);
+                a[2] = Math.max(1, end - a[1]);
+                a[0] = o[0];
+            } else if (handleId === 'vend') {
+                a[0] = o[0];
+                a[1] = o[1];
+                a[2] = Math.max(1, Math.round(mouseY) - o[1]);
+            }
+            return;
+        }
+    }
+
+    function renderCanvas(isExport = false) {
+        const canvas = document.getElementById('display-canvas');
+        const ctx = canvas.getContext('2d');
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.textBaseline = 'top';
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        drawObjects.forEach((obj, idx) => {
+            ctx.setLineDash([]);
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            if (obj.cmd === 'setCursor') {
+                let cx = obj.args[0], cy = obj.args[1];
+                ctx.strokeStyle = '#0088ff';
+                ctx.lineWidth = 1;
+                ctx.moveTo(cx - 5, cy); ctx.lineTo(cx + 5, cy);
+                ctx.moveTo(cx, cy - 5); ctx.lineTo(cx, cy + 5);
+                ctx.stroke();
+            } else if (obj.cmd === 'setPartialWindow') {
+                ctx.strokeStyle = '#888888';
+                ctx.setLineDash([4, 4]);
+                ctx.strokeRect(obj.args[0], obj.args[1], obj.args[2], obj.args[3]);
+                ctx.setLineDash([]);
+                ctx.fillStyle = '#888888';
+                ctx.font = '9px monospace';
+                ctx.fillText('PartialWindow', obj.args[0] + 2, obj.args[1] + 2);
+            } else if (obj.cmd === 'fillScreen') {
+                let c = resolveColor(obj.rawArgs[0]);
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            } else if (obj.cmd === 'fillRect') {
+                let c = resolveColor(obj.rawArgs[4]);
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(obj.args[0], obj.args[1], obj.args[2], obj.args[3]);
+            } else if (obj.cmd === 'drawRect') {
+                let c = resolveColor(obj.rawArgs[4]);
+                ctx.strokeStyle = c.hex;
+                ctx.strokeRect(obj.args[0], obj.args[1], obj.args[2], obj.args[3]);
+            } else if (obj.cmd === 'drawBitmap' || obj.cmd === 'drawInvertedBitmap') {
+    let c = resolveColor(obj.rawArgs[5]);
+    ctx.save();
+    ctx.fillStyle = c.hex;
+    ctx.globalAlpha = 0.35;
+    ctx.fillRect(obj.args[0], obj.args[1], obj.args[3], obj.args[4]);
+    ctx.globalAlpha = 1.0;
+    ctx.strokeStyle = c.hex;
+
+    // FIX: Shift 0.5px inward and reduce dimensions by 1px
+    ctx.strokeRect(obj.args[0] + 0.5, obj.args[1] + 0.5, obj.args[3] - 1, obj.args[4] - 1);
+
+    ctx.fillStyle = (c.hex === '#FFFFFF') ? '#000000' : c.hex;
+    ctx.font = '10px monospace';
+    ctx.textBaseline = 'top'; // Keeps label text cleanly aligned inside
+    ctx.fillText(String(obj.args[2]), obj.args[0] + 3, obj.args[1] + 3);
+    ctx.restore();
+
+            } else if (obj.cmd === 'fillRoundRect' || obj.cmd === 'drawRoundRect') {
+                let c = resolveColor(obj.rawArgs[5]);
+                ctx.beginPath();
+                if (typeof ctx.roundRect === 'function') {
+                    ctx.roundRect(obj.args[0], obj.args[1], obj.args[2], obj.args[3], obj.args[4]);
+                } else {
+                    ctx.rect(obj.args[0], obj.args[1], obj.args[2], obj.args[3]);
+                }
+                if (obj.cmd === 'fillRoundRect') { ctx.fillStyle = c.hex; ctx.fill(); }
+                else { ctx.strokeStyle = c.hex; ctx.stroke(); }
+            } else if (obj.cmd === 'fillCircle') {
+                let c = resolveColor(obj.rawArgs[3]);
+                ctx.beginPath();
+                ctx.arc(obj.args[0], obj.args[1], obj.args[2], 0, 2 * Math.PI);
+                ctx.fillStyle = c.hex;
+                ctx.fill();
+            } else if (obj.cmd === 'drawCircle') {
+                let c = resolveColor(obj.rawArgs[3]);
+                ctx.beginPath();
+                ctx.arc(obj.args[0], obj.args[1], obj.args[2], 0, 2 * Math.PI);
+                ctx.strokeStyle = c.hex;
+                ctx.stroke();
+            } else if (obj.cmd === 'fillTriangle' || obj.cmd === 'drawTriangle') {
+                let c = resolveColor(obj.rawArgs[6]);
+                ctx.beginPath();
+                ctx.moveTo(obj.args[0], obj.args[1]);
+                ctx.lineTo(obj.args[2], obj.args[3]);
+                ctx.lineTo(obj.args[4], obj.args[5]);
+                ctx.closePath();
+                if (obj.cmd === 'fillTriangle') { ctx.fillStyle = c.hex; ctx.fill(); }
+                else { ctx.strokeStyle = c.hex; ctx.stroke(); }
+            } else if (obj.cmd === 'drawLine') {
+                let c = resolveColor(obj.rawArgs[4]);
+                ctx.beginPath();
+                ctx.strokeStyle = c.hex;
+                ctx.moveTo(obj.args[0], obj.args[1]);
+                ctx.lineTo(obj.args[2], obj.args[3]);
+                ctx.stroke();
+            } else if (obj.cmd === 'drawFastHLine') {
+                let c = resolveColor(obj.rawArgs[3]);
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(obj.args[0], obj.args[1], obj.args[2], 1);
+            } else if (obj.cmd === 'drawFastVLine') {
+                let c = resolveColor(obj.rawArgs[3]);
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(obj.args[0], obj.args[1], 1, obj.args[2]);
+            } else if (obj.cmd === 'drawPixel') {
+                let c = resolveColor(obj.rawArgs[2]);
+                ctx.fillStyle = c.hex;
+                ctx.fillRect(obj.args[0], obj.args[1], 1, 1);
+            } else if (obj.cmd === 'drawChar') {
+                const fg = resolveColor(obj.rawArgs[3]);
+                const bg = resolveColor(obj.rawArgs[4]);
+                const px = obj.args[0], py = obj.args[1];
+                // Layout stays 6×8; render a touch larger so it closer matches e-ink
+                const fontPx = Math.max(8, gfxCharH(obj.sizeY) + FONT_RENDER_BOOST);
+                if (obj.rawArgs[4] && obj.rawArgs[4] !== obj.rawArgs[3]) {
+                    ctx.fillStyle = bg.hex;
+                    ctx.fillRect(px, py, obj.width, obj.height);
+                }
+                ctx.fillStyle = fg.hex;
+                ctx.font = `${fontPx}px monospace`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(obj.char || '?', px, py);
+            } else if (obj.cmd === 'print' || obj.cmd === 'println') {
+                const fontPx = Math.max(8, gfxCharH(obj.sizeY || 1) + FONT_RENDER_BOOST);
+                if (obj.textBg) {
+                    ctx.fillStyle = resolveColor(obj.textBg).hex;
+                    ctx.fillRect(obj.x, obj.y, Math.max(obj.width, 1), obj.height);
+                }
+                ctx.fillStyle = resolveColor(obj.textColor || 'GxEPD_BLACK').hex;
+                ctx.font = `${fontPx}px monospace`;
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                ctx.fillText(obj.text, obj.x, obj.y);
+            }
+
+            if (!isExport && idx === selectedIndex) {
+                ctx.strokeStyle = obj.isLoopGenerated ? '#ff9800' : '#00FF00';
+                ctx.setLineDash([4, 2]); ctx.lineWidth = 1.5;
+                if (['fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'setPartialWindow'].includes(obj.cmd)) {
+                    ctx.strokeRect(obj.args[0]-2, obj.args[1]-2, obj.args[2]+4, obj.args[3]+4);
+                } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+                    ctx.strokeRect(obj.args[0]-2, obj.args[1]-2, obj.args[3]+4, obj.args[4]+4);
+                } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+                    ctx.beginPath(); ctx.arc(obj.args[0], obj.args[1], obj.args[2]+2, 0, 2 * Math.PI); ctx.stroke();
+                } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+                    ctx.beginPath();
+                    ctx.moveTo(obj.args[0], obj.args[1]); ctx.lineTo(obj.args[2], obj.args[3]); ctx.lineTo(obj.args[4], obj.args[5]); ctx.closePath();
+                    ctx.stroke();
+                } else if (obj.cmd === 'drawLine') {
+                    ctx.beginPath(); ctx.moveTo(obj.args[0], obj.args[1]); ctx.lineTo(obj.args[2], obj.args[3]); ctx.stroke();
+                } else if (obj.cmd === 'drawFastHLine') {
+                    ctx.strokeRect(obj.args[0]-2, obj.args[1]-2, obj.args[2]+4, 5);
+                } else if (obj.cmd === 'drawFastVLine') {
+                    ctx.strokeRect(obj.args[0]-2, obj.args[1]-2, 5, obj.args[2]+4);
+                } else if (obj.cmd === 'drawPixel') {
+                    ctx.strokeRect(obj.args[0]-2, obj.args[1]-2, 5, 5);
+                } else if (obj.cmd === 'setCursor') {
+                    ctx.strokeRect(obj.args[0]-6, obj.args[1]-6, 12, 12);
+                } else if (obj.cmd === 'drawChar') {
+                    ctx.strokeRect(obj.args[0] - 2, obj.args[1] - 2, obj.width + 4, obj.height + 4);
+                } else if (['print', 'println'].includes(obj.cmd)) {
+                    ctx.strokeRect(obj.x - 2, obj.y - 2, Math.max(obj.width, 10) + 4, obj.height + 4);
+                }
+                ctx.setLineDash([]); ctx.lineWidth = 1;
+                // Resize handles (not for loop-generated or non-resizable types)
+                if (!obj.isLoopGenerated) drawResizeHandles(ctx, obj);
+            }
+        });
+
+        if (!isExport) {
+            const gridVal = document.getElementById('grid-select').value;
+            drawGrid(ctx, canvas.width, canvas.height, gridVal);
+        }
+    }
+
+    const canvas = document.getElementById('display-canvas');
+    const container = document.getElementById('canvas-container');
+
+    container.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        const zoomSelect = document.getElementById('zoom-select');
+        const options = Array.from(zoomSelect.options).map(o => parseFloat(o.value));
+        let currentVal = parseFloat(zoomSelect.value);
+        let currentIndex = options.indexOf(currentVal);
+
+        if (e.deltaY < 0 && currentIndex < options.length - 1) {
+            zoomSelect.value = options[currentIndex + 1];
+            updateZoom();
+        } else if (e.deltaY > 0 && currentIndex > 0) {
+            zoomSelect.value = options[currentIndex - 1];
+            updateZoom();
+        }
+    }, { passive: false });
+
+    let isPanning = false;
+    let panStartX = 0, panStartY = 0;
+    let scrollStartX = 0, scrollStartY = 0;
+
+    container.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    container.addEventListener('mousedown', (e) => {
+        if (e.button === 2) {
+            isPanning = true;
+            panStartX = e.clientX;
+            panStartY = e.clientY;
+            scrollStartX = container.scrollLeft;
+            scrollStartY = container.scrollTop;
+            container.style.cursor = 'grabbing';
+        }
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        const { x, y } = getCanvasCoords(e);
+
+        // Prefer resize handle of the already-selected object
+        if (selectedIndex >= 0 && selectedIndex < drawObjects.length) {
+            const sel = drawObjects[selectedIndex];
+            if (!sel.isLoopGenerated) {
+                const hid = hitTestHandle(sel, x, y);
+                if (hid) {
+                    isResizing = true;
+                    isDragging = false;
+                    dragHasMoved = false;
+                    resizeHandleId = hid;
+                    resizeOrigArgs = [...sel.args];
+                    return;
+                }
+            }
+        }
+
+        selectedIndex = -1;
+        selectedLineIdx = -1;
+        isResizing = false;
+        resizeHandleId = null;
+        
+        for (let i = drawObjects.length - 1; i >= 0; i--) {
+            let obj = drawObjects[i];
+            if (obj.cmd === 'fillScreen' || obj.cmd === 'setFullWindow') continue;
+
+            let hit = false;
+            let a = obj.args;
+            if (['fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'setPartialWindow'].includes(obj.cmd)) {
+                if (x >= a[0] && x <= a[0]+a[2] && y >= a[1] && y <= a[1]+a[3]) hit = true;
+            } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+                if (x >= a[0] && x <= a[0]+a[3] && y >= a[1] && y <= a[1]+a[4]) hit = true;
+            } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+                if (Math.hypot(x - a[0], y - a[1]) <= a[2]) hit = true;
+            } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+                let minX = Math.min(a[0], a[2], a[4])-5, maxX = Math.max(a[0], a[2], a[4])+5;
+                let minY = Math.min(a[1], a[3], a[5])-5, maxY = Math.max(a[1], a[3], a[5])+5;
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY) hit = true;
+            } else if (obj.cmd === 'drawLine') {
+                let minX = Math.min(a[0], a[2])-5, maxX = Math.max(a[0], a[2])+5;
+                let minY = Math.min(a[1], a[3])-5, maxY = Math.max(a[1], a[3])+5;
+                if (x >= minX && x <= maxX && y >= minY && y <= maxY) hit = true;
+            } else if (obj.cmd === 'drawFastHLine') {
+                if(x >= a[0] && x <= a[0]+a[2] && Math.abs(y - a[1]) < 5) hit = true;
+            } else if (obj.cmd === 'drawFastVLine') {
+                if(Math.abs(x - a[0]) < 5 && y >= a[1] && y <= a[1]+a[2]) hit = true;
+            } else if (obj.cmd === 'drawPixel' || obj.cmd === 'setCursor') {
+                if(Math.abs(x - a[0]) <= 6 && Math.abs(y - a[1]) <= 6) hit = true;
+            } else if (obj.cmd === 'drawChar') {
+                if (x >= a[0] - 2 && x <= a[0] + obj.width && y >= a[1] - 2 && y <= a[1] + obj.height) hit = true;
+            } else if (['print', 'println'].includes(obj.cmd)) {
+                if (x >= obj.x - 2 && x <= obj.x + Math.max(obj.width, 10) && y >= obj.y - 2 && y <= obj.y + obj.height) hit = true;
+            }
+
+            if (hit) {
+                selectedIndex = i;
+                selectedLineIdx = obj.lineIdx;
+                if (!obj.isLoopGenerated) {
+                    // Check if click landed on a handle of this newly selected object
+                    const hid = hitTestHandle(obj, x, y);
+                    if (hid) {
+                        isResizing = true;
+                        isDragging = false;
+                        dragHasMoved = false;
+                        resizeHandleId = hid;
+                        resizeOrigArgs = [...obj.args];
+                    } else if (['print', 'println'].includes(obj.cmd) && !obj.hasDedicatedCursor) {
+                        isDragging = false;
+                        dragHasMoved = false;
+                    } else {
+                        isDragging = true;
+                        dragHasMoved = false;
+                        dragStartX = x; dragStartY = y;
+                        dragOrigArgs = [...obj.args];
+                        if (['print', 'println'].includes(obj.cmd)) {
+                            dragOrigArgs = [obj.x, obj.y];
+                        }
+                    }
+                }
+                break;
+            }
+        }
+        processCode(false, false);
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (isPanning) {
+            const dx = e.clientX - panStartX;
+            const dy = e.clientY - panStartY;
+            container.scrollLeft = scrollStartX - dx;
+            container.scrollTop = scrollStartY - dy;
+            return;
+        }
+
+        // Resize in progress
+        if (isResizing && selectedIndex !== -1 && resizeHandleId) {
+            const { x: mouseX, y: mouseY } = getCanvasCoords(e);
+            const obj = drawObjects[selectedIndex];
+            applyResize(obj, resizeHandleId, mouseX, mouseY);
+            dragHasMoved = true; // reuse flag so mouseup commits the change
+            renderCanvas();
+            return;
+        }
+
+        if (!isDragging || selectedIndex === -1) return;
+        
+        const { x: mouseX, y: mouseY } = getCanvasCoords(e);
+        
+        const dx = Math.round(mouseX - dragStartX);
+        const dy = Math.round(mouseY - dragStartY);
+        if (dx !== 0 || dy !== 0) dragHasMoved = true;
+        
+        let obj = drawObjects[selectedIndex];
+
+        if (['fillRect', 'drawRect', 'fillRoundRect', 'drawRoundRect', 'fillCircle', 'drawCircle', 'drawFastHLine', 'drawFastVLine', 'drawPixel', 'setCursor', 'setPartialWindow', 'drawBitmap', 'drawInvertedBitmap', 'drawChar'].includes(obj.cmd)) {
+            obj.args[0] = dragOrigArgs[0] + dx;
+            obj.args[1] = dragOrigArgs[1] + dy;
+        } else if (obj.cmd === 'drawLine') {
+            obj.args[0] = dragOrigArgs[0] + dx;
+            obj.args[1] = dragOrigArgs[1] + dy;
+            obj.args[2] = dragOrigArgs[2] + dx;
+            obj.args[3] = dragOrigArgs[3] + dy;
+        } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+            obj.args[0] = dragOrigArgs[0] + dx; obj.args[1] = dragOrigArgs[1] + dy;
+            obj.args[2] = dragOrigArgs[2] + dx; obj.args[3] = dragOrigArgs[3] + dy;
+            obj.args[4] = dragOrigArgs[4] + dx; obj.args[5] = dragOrigArgs[5] + dy;
+        } else if (['print', 'println'].includes(obj.cmd) && obj.hasDedicatedCursor) {
+            obj.x = dragOrigArgs[0] + dx;
+            obj.y = dragOrigArgs[1] + dy;
+        }
+        
+        renderCanvas();
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (e.button === 2 || isPanning) {
+            isPanning = false;
+            container.style.cursor = 'default';
+        }
+
+        if ((isDragging || isResizing) && selectedIndex !== -1) {
+            const wasResizing = isResizing;
+            isDragging = false;
+            isResizing = false;
+            // Only rewrite the source line if the object actually moved or was resized.
+            // A pure click must not replace variables (margin, boxW, …) with numbers.
+            if (dragHasMoved) {
+                let obj = drawObjects[selectedIndex];
+                
+                if (['print', 'println'].includes(obj.cmd)) {
+                    if (obj.hasDedicatedCursor && obj.cursorLineIdx !== -1) {
+                        codeLines[obj.cursorLineIdx] = `display.setCursor(${obj.x}, ${obj.y});`;
+                    }
+                } else {
+                    // Write updated geometry as numbers; keep colour / other raw expressions
+                    let newArgs = [...obj.rawArgs];
+                    if (['fillRect', 'drawRect', 'setPartialWindow'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                    } else if (['fillRoundRect', 'drawRoundRect'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                        // keep radius rawArgs[4] and colour
+                    } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
+                    } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[3] = obj.args[3]; newArgs[4] = obj.args[4];
+                    } else if (['drawFastHLine', 'drawFastVLine'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
+                    } else if (obj.cmd === 'drawPixel' || obj.cmd === 'setCursor') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                    } else if (obj.cmd === 'drawChar') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                    } else if (obj.cmd === 'drawLine') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                    } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                        newArgs[4] = obj.args[4]; newArgs[5] = obj.args[5];
+                    }
+                    codeLines[obj.lineIdx] = `display.${obj.cmd}(${newArgs.join(', ')});`;
+                }
+                
+                document.getElementById('code-input').value = codeLines.join('\n');
+                processCode(true);
+            } else {
+                // Pure click — just refresh selection highlight / properties
+                processCode(false);
+            }
+        }
+        isDragging = false;
+        isResizing = false;
+        resizeHandleId = null;
+        dragHasMoved = false;
+    });
+
+    window.addEventListener('keydown', (e) => {
+        const activeTag = document.activeElement ? document.activeElement.tagName.toLowerCase() : '';
+        const inField = activeTag === 'input' || activeTag === 'textarea';
+
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+            e.preventDefault();
+            if (e.shiftKey) redo(); else undo();
+            return;
+        }
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+            e.preventDefault();
+            redo();
+            return;
+        }
+        if (e.key === 'Escape') {
+            selectedIndex = -1;
+            selectedLineIdx = -1;
+            processCode(false);
+            return;
+        }
+        if ((e.key === 'Delete' || e.key === 'Backspace') && selectedIndex !== -1) {
+            if (inField) return;
+            e.preventDefault();
+            deleteSelectedObject();
+        }
+    });
+
+    function deleteSelectedObject() {
+        if (selectedIndex === -1) return;
+        let obj = drawObjects[selectedIndex];
+        if (obj.isLoopGenerated) return;
+        let lineToDelete = obj.lineIdx;
+        selectedIndex = -1;
+        selectedLineIdx = -1;
+        if (lineToDelete >= 0 && lineToDelete < codeLines.length) {
+            codeLines.splice(lineToDelete, 1);
+            document.getElementById('code-input').value = codeLines.join('\n');
+            processCode(true);
+        }
+    }
+
+    function addCursorToText(lineIdx, defaultX, defaultY) {
+        codeLines.splice(lineIdx, 0, `display.setCursor(${defaultX}, ${defaultY});`);
+        document.getElementById('code-input').value = codeLines.join('\n');
+        processCode(true);
+    }
+
+    function updateInsertFields() {
+        const cmd = document.getElementById('insert-cmd').value;
+        const container = document.getElementById('insert-fields');
+        let html = '';
+
+        if (['fillRect', 'drawRect', 'setPartialWindow'].includes(cmd)) {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 10) + makeNumInput('ins-w', 'W', 100) + makeNumInput('ins-h', 'H', 50);
+            if (cmd !== 'setPartialWindow') html += makeColorSelect('ins-c');
+        } else if (['drawBitmap', 'drawInvertedBitmap'].includes(cmd)) {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 10) + 
+                    `<label>Img:</label> <input type="text" id="ins-img" value="epd_bitmap">` + 
+                    makeNumInput('ins-w', 'W', 50) + makeNumInput('ins-h', 'H', 50) + makeColorSelect('ins-c');
+        } else if (['fillRoundRect', 'drawRoundRect'].includes(cmd)) {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 10) + makeNumInput('ins-w', 'W', 50) + makeNumInput('ins-h', 'H', 30) + makeNumInput('ins-r', 'R', 5) + makeColorSelect('ins-c');
+        } else if (['fillCircle', 'drawCircle'].includes(cmd)) {
+            html += makeNumInput('ins-x', 'X', 50) + makeNumInput('ins-y', 'Y', 50) + makeNumInput('ins-r', 'R', 20) + makeColorSelect('ins-c');
+        } else if (['fillTriangle', 'drawTriangle'].includes(cmd)) {
+            html += makeNumInput('ins-x0', 'X0', 10) + makeNumInput('ins-y0', 'Y0', 50) + makeNumInput('ins-x1', 'X1', 30) + makeNumInput('ins-y1', 'Y1', 10) + makeNumInput('ins-x2', 'X2', 50) + makeNumInput('ins-y2', 'Y2', 50) + makeColorSelect('ins-c');
+        } else if (cmd === 'drawLine') {
+            html += makeNumInput('ins-x0', 'X0', 10) + makeNumInput('ins-y0', 'Y0', 10) + makeNumInput('ins-x1', 'X1', 80) + makeNumInput('ins-y1', 'Y1', 80) + makeColorSelect('ins-c');
+        } else if (cmd === 'drawFastHLine') {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 10) + makeNumInput('ins-w', 'W', 80) + makeColorSelect('ins-c');
+        } else if (cmd === 'drawFastVLine') {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 10) + makeNumInput('ins-h', 'H', 80) + makeColorSelect('ins-c');
+        } else if (cmd === 'drawPixel') {
+            html += makeNumInput('ins-x', 'X', 20) + makeNumInput('ins-y', 'Y', 20) + makeColorSelect('ins-c');
+        } else if (cmd === 'fillScreen') {
+            html += makeColorSelect('ins-c');
+        } else if (cmd === 'setCursor') {
+            html += makeNumInput('ins-x', 'X', 10) + makeNumInput('ins-y', 'Y', 20);
+        } else if (cmd === 'setTextColor') {
+            html += makeColorSelect('ins-c', 'Color') + makeColorSelect('ins-bg', 'Background', true);
+        } else if (cmd === 'setTextSize') {
+            html += makeNumInput('ins-sx', 'Size', 1);
+        } else if (cmd === 'drawChar') {
+            html += makeNumInput('ins-x', 'X', 20) + makeNumInput('ins-y', 'Y', 20) +
+                    `<label>Char:</label> <input type="text" id="ins-ch" value="A" maxlength="1" style="width:40px;">` +
+                    makeColorSelect('ins-c', 'Color') + makeColorSelect('ins-bg', 'Background', false) +
+                    makeNumInput('ins-sz', 'Size', 2);
+        } else if (['print', 'println'].includes(cmd)) {
+            html += `<label>Text:</label> <input type="text" id="ins-txt" value="Hello World">`;
+        }
+
+        container.innerHTML = html;
+    }
+
+    function makeNumInput(id, label, defaultVal) {
+        return `<label>${label}:</label> <input type="number" id="${id}" value="${defaultVal}">`;
+    }
+
+    function makeColorSelect(id, label = 'Color', allowNone = false) {
+        const activeClass = document.getElementById('disp-class').value;
+        const validColors = displayPalettes[activeClass] || displayPalettes['BW'];
+        let options = '';
+        if (allowNone) {
+            options += `<option value="">(none)</option>`;
+        }
+        options += Object.keys(colorHexMap).map(c => {
+            let warnMark = validColors.includes(c) ? '' : ' ⚠️';
+            return `<option value="${c}">${c}${warnMark}</option>`;
+        }).join('');
+        return `<label>${label}:</label> <select id="${id}">${options}</select>`;
+    }
+
+    function insertFunctionCode() {
+        const cmd = document.getElementById('insert-cmd').value;
+        let generatedCode = '';
+
+        if (['fillRect', 'drawRect'].includes(cmd)) {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-w')}, ${val('ins-h')}, ${val('ins-c')});`;
+        } else if (['drawBitmap', 'drawInvertedBitmap'].includes(cmd)) {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-img')}, ${val('ins-w')}, ${val('ins-h')}, ${val('ins-c')});`;
+        } else if (cmd === 'setPartialWindow') {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-w')}, ${val('ins-h')});`;
+        } else if (['fillRoundRect', 'drawRoundRect'].includes(cmd)) {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-w')}, ${val('ins-h')}, ${val('ins-r')}, ${val('ins-c')});`;
+        } else if (['fillCircle', 'drawCircle'].includes(cmd)) {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-r')}, ${val('ins-c')});`;
+        } else if (['fillTriangle', 'drawTriangle'].includes(cmd)) {
+            generatedCode = `display.${cmd}(${val('ins-x0')}, ${val('ins-y0')}, ${val('ins-x1')}, ${val('ins-y1')}, ${val('ins-x2')}, ${val('ins-y2')}, ${val('ins-c')});`;
+        } else if (cmd === 'drawLine') {
+            generatedCode = `display.${cmd}(${val('ins-x0')}, ${val('ins-y0')}, ${val('ins-x1')}, ${val('ins-y1')}, ${val('ins-c')});`;
+        } else if (cmd === 'drawFastHLine') {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-w')}, ${val('ins-c')});`;
+        } else if (cmd === 'drawFastVLine') {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-h')}, ${val('ins-c')});`;
+        } else if (cmd === 'drawPixel') {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')}, ${val('ins-c')});`;
+        } else if (cmd === 'fillScreen') {
+            generatedCode = `display.${cmd}(${val('ins-c')});`;
+        } else if (cmd === 'setCursor') {
+            generatedCode = `display.${cmd}(${val('ins-x')}, ${val('ins-y')});`;
+        } else if (cmd === 'setTextColor') {
+            const bg = val('ins-bg');
+            generatedCode = bg
+                ? `display.setTextColor(${val('ins-c')}, ${bg});`
+                : `display.setTextColor(${val('ins-c')});`;
+        } else if (cmd === 'setTextSize') {
+            generatedCode = `display.setTextSize(${val('ins-sx') || '1'});`;
+        } else if (cmd === 'drawChar') {
+            const ch = (val('ins-ch') || 'A').charAt(0).replace(/'/g, '');
+            generatedCode = `display.drawChar(${val('ins-x')}, ${val('ins-y')}, '${ch}', ${val('ins-c')}, ${val('ins-bg')}, ${val('ins-sz')});`;
+        } else if (['print', 'println'].includes(cmd)) {
+            const t = (val('ins-txt') || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            generatedCode = `display.${cmd}("${t}");`;
+        }
+
+        const textArea = document.getElementById('code-input');
+        textArea.value = textArea.value.trim() + '\n' + generatedCode;
+        processCode(true);
+    }
+
+    function val(id) {
+        return document.getElementById(id) ? document.getElementById(id).value : '';
+    }
+
+    function onDisplayClassChange() {
+        updateInsertFields();
+        processCode(true);
+    }
+
+    function updatePropertiesPanel() {
+        const panel = document.getElementById('props-panel');
+        if (selectedIndex === -1) {
+            panel.innerHTML = '<div style="color: #888; font-size: 0.9em; width:100%;">Select an object on the canvas to edit, drag, or resize via the blue handles. Scroll to zoom. Pan with right mouse button. Grid overlay options available.</div>';
+            return;
+        }
+
+        let obj = drawObjects[selectedIndex];
+
+        if (obj.isLoopGenerated) {
+            panel.innerHTML = `<div style="color: #e5c07b; font-size: 0.9em; width:100%;">⚠️ Selected object was generated inside a loop (Line ${obj.lineIdx + 1}). Direct dragging/editing is disabled—edit the loop code directly in the code editor.</div>`;
+            return;
+        }
+
+        let html = `<div style="width:100%; font-weight:bold; color:white; display:flex; align-items:center;"><span>Editing: ${obj.cmd} (Line ${obj.lineIdx + 1})</span><button style="background: #dc3545; color: white; border: none; padding: 4px 10px; border-radius: 3px; cursor: pointer; font-weight: bold; margin-left: auto;" onclick="deleteSelectedObject()">🗑️ Delete</button></div>`;
+
+        // Warn when parameters depend on variables / expressions (including setCursor for print/println)
+        if (hasVariableArgs(obj)) {
+            const isText = ['print', 'println'].includes(obj.cmd);
+            html += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-top:4px;">
+                ⚠️ <strong>Parameters use variables or expressions</strong> (e.g. <code>margin</code>, <code>boxW</code>, <code>display.height()</code>${isText ? ', or the linked <code>setCursor</code>' : ''}).<br>
+                Clicking alone will not change the code. <strong>Dragging or resizing</strong> this object will replace those expressions with plain numbers.
+            </div>`;
+        }
+        
+        // Prefer rawArgs (original expressions) so variables like margin / boxW are preserved and editable
+        const raw = obj.rawArgs || [];
+        if (['fillRect', 'drawRect', 'setPartialWindow'].includes(obj.cmd)) {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += makePropUI('W', raw[2], 'p-2') + makePropUI('H', raw[3], 'p-3');
+            if (obj.cmd !== 'setPartialWindow') {
+                html += makeColorSelectUI('Color', raw[4], 'p-4');
+            }
+        } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += `<div class="prop-group"><label>Img:</label> <input type="text" id="p-2" value="${escapeHtml(raw[2] || obj.args[2])}" oninput="applyProperties()" onchange="saveHistoryState()"></div>`;
+            html += makePropUI('W', raw[3], 'p-3') + makePropUI('H', raw[4], 'p-4');
+            html += makeColorSelectUI('Color', raw[5], 'p-5');
+        } else if (['fillRoundRect', 'drawRoundRect'].includes(obj.cmd)) {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += makePropUI('W', raw[2], 'p-2') + makePropUI('H', raw[3], 'p-3');
+            html += makePropUI('R', raw[4], 'p-4');
+            html += makeColorSelectUI('Color', raw[5], 'p-5');
+        } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += makePropUI('R', raw[2], 'p-2');
+            html += makeColorSelectUI('Color', raw[3], 'p-3');
+        } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+            html += makePropUI('X0', raw[0], 'p-0') + makePropUI('Y0', raw[1], 'p-1');
+            html += makePropUI('X1', raw[2], 'p-2') + makePropUI('Y1', raw[3], 'p-3');
+            html += makePropUI('X2', raw[4], 'p-4') + makePropUI('Y2', raw[5], 'p-5');
+            html += makeColorSelectUI('Color', raw[6], 'p-6');
+        } else if (obj.cmd === 'drawLine') {
+            html += makePropUI('X0', raw[0], 'p-0') + makePropUI('Y0', raw[1], 'p-1');
+            html += makePropUI('X1', raw[2], 'p-2') + makePropUI('Y1', raw[3], 'p-3');
+            html += makeColorSelectUI('Color', raw[4], 'p-4');
+        } else if (obj.cmd === 'drawFastHLine') {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += makePropUI('W', raw[2], 'p-2') + makeColorSelectUI('Color', raw[3], 'p-3');
+        } else if (obj.cmd === 'drawFastVLine') {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            html += makePropUI('H', raw[2], 'p-2') + makeColorSelectUI('Color', raw[3], 'p-3');
+        } else if (obj.cmd === 'drawPixel' || obj.cmd === 'setCursor') {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            if (obj.cmd === 'drawPixel') html += makeColorSelectUI('Color', raw[2], 'p-2');
+        } else if (obj.cmd === 'drawChar') {
+            html += makePropUI('X', raw[0], 'p-0') + makePropUI('Y', raw[1], 'p-1');
+            const cleanChar = (obj.char || 'A').replace(/['"]/g, '').charAt(0) || 'A';
+            html += `<div class="prop-group"><label>Char:</label> <input type="text" id="p-2" value="${escapeHtml(cleanChar)}" maxlength="1" oninput="applyProperties()" onchange="saveHistoryState()" style="width:40px;"></div>`;
+            html += makeColorSelectUI('Color', raw[3], 'p-3');
+            html += makeColorSelectUI('Background', raw[4], 'p-4');
+            html += makePropUI('Size', raw[5], 'p-5');
+        } else if (['print', 'println'].includes(obj.cmd)) {
+            if (obj.hasDedicatedCursor) {
+                // Show original setCursor expressions (variables) when available
+                let cursorRawX = obj.x, cursorRawY = obj.y;
+                const cursorObj = drawObjects.find(o => o.cmd === 'setCursor' && o.lineIdx === obj.cursorLineIdx);
+                if (cursorObj && cursorObj.rawArgs && cursorObj.rawArgs.length >= 2) {
+                    cursorRawX = cursorObj.rawArgs[0];
+                    cursorRawY = cursorObj.rawArgs[1];
+                } else if (codeLines && obj.cursorLineIdx >= 0 && codeLines[obj.cursorLineIdx]) {
+                    const m = codeLines[obj.cursorLineIdx].match(/setCursor\s*\(\s*(.+)\s*\)/);
+                    if (m) {
+                        const parts = splitArgs(m[1]);
+                        if (parts.length >= 2) {
+                            cursorRawX = parts[0];
+                            cursorRawY = parts[1];
+                        }
+                    }
+                }
+                html += makePropUI('Cursor X', cursorRawX, 'p-x');
+                html += makePropUI('Cursor Y', cursorRawY, 'p-y');
+            } else {
+                html += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b;">
+                    💡 <strong>Tip:</strong> Text position relies on <code>display.setCursor(x, y)</code>. To drag or reposition this text on canvas, add a cursor above it.
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addCursorToText(${obj.lineIdx}, ${obj.x}, ${obj.y})">➕ Add setCursor(${obj.x}, ${obj.y})</button>
+                    </div>
+                </div>`;
+            }
+            html += `<div class="prop-group"><label>Text:</label> <input type="text" id="p-t" value="${escapeHtml(obj.text)}" oninput="applyProperties()" onchange="saveHistoryState()"></div>`;
+        } else if (obj.cmd === 'fillScreen') {
+            html += makeColorSelectUI('Color', raw[0], 'p-0');
+        }
+        
+        panel.innerHTML = html;
+    }
+
+    /** True if a single raw argument is a variable / expression (not a plain number, colour, or quoted string). */
+    function isVariableOrExpression(a) {
+        const t = String(a == null ? '' : a).trim();
+        if (!t) return false;
+        if (/^-?\d+(\.\d+)?$/.test(t)) return false;
+        const colorNames = Object.keys(colorHexMap);
+        if (colorNames.includes(t) || colorNames.includes(normalizeColorToken(t))) return false;
+        if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) return false;
+        return true;
+    }
+
+    /** True if any argument is not a plain number or colour constant (i.e. uses a variable or expression).
+     *  For print/println, also checks the linked setCursor line when present. */
+    function hasVariableArgs(obj) {
+        if (!obj) return false;
+        if (obj.rawArgs && obj.rawArgs.some(isVariableOrExpression)) return true;
+
+        // print/println position comes from setCursor — check that line too
+        if (['print', 'println'].includes(obj.cmd) && obj.hasDedicatedCursor && obj.cursorLineIdx != null && obj.cursorLineIdx >= 0) {
+            const cursorObj = drawObjects.find(o => o.cmd === 'setCursor' && o.lineIdx === obj.cursorLineIdx);
+            if (cursorObj && cursorObj.rawArgs && cursorObj.rawArgs.some(isVariableOrExpression)) return true;
+            // Fallback: inspect the source line if the cursor object isn't in drawObjects yet
+            if (codeLines && codeLines[obj.cursorLineIdx]) {
+                const m = codeLines[obj.cursorLineIdx].match(/setCursor\s*\(\s*(.+)\s*\)/);
+                if (m) {
+                    const parts = splitArgs(m[1]);
+                    if (parts.some(isVariableOrExpression)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    function makePropUI(label, val, id) {
+        // type=text so variable names / expressions (margin, boxW, width()/2 …) are preserved and editable
+        return `<div class="prop-group"><label>${label}:</label> <input type="text" id="${id}" value="${escapeHtml(val)}" oninput="applyProperties()" onchange="saveHistoryState()" style="width:72px;"></div>`;
+    }
+
+    function makeColorSelectUI(label, currentVal, id) {
+        const activeClass = document.getElementById('disp-class').value;
+        const validColors = displayPalettes[activeClass] || displayPalettes['BW'];
+        
+        let options = Object.keys(colorHexMap).map(c => {
+            let warnMark = validColors.includes(c) ? '' : ' ⚠️ (Unsupported)';
+            return `<option value="${c}" ${c === currentVal ? 'selected' : ''}>${c}${warnMark}</option>`;
+        }).join('');
+
+        return `<div class="prop-group"><label>${label}:</label> <select id="${id}" onchange="applyProperties(); saveHistoryState();">${options}</select></div>`;
+    }
+
+    function applyProperties() {
+        if (selectedIndex === -1) return;
+        let obj = drawObjects[selectedIndex];
+        if (obj.isLoopGenerated) return;
+        
+        if (['print', 'println'].includes(obj.cmd)) {
+            let newText = (document.getElementById('p-t').value || '').replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            codeLines[obj.lineIdx] = `display.${obj.cmd}("${newText}");`;
+
+            if (obj.hasDedicatedCursor) {
+                let pxEl = document.getElementById('p-x');
+                let pyEl = document.getElementById('p-y');
+                if (pxEl && pyEl && obj.cursorLineIdx !== -1) {
+                    codeLines[obj.cursorLineIdx] = `display.setCursor(${pxEl.value}, ${pyEl.value});`;
+                }
+            }
+        } else if (obj.cmd === 'drawChar') {
+            let newArgs = [...obj.rawArgs];
+            for (let i = 0; i < newArgs.length; i++) {
+                let el = document.getElementById(`p-${i}`);
+                if (el) newArgs[i] = el.value;
+            }
+            const rawCh = (document.getElementById('p-2') ? document.getElementById('p-2').value : 'A');
+            const ch = rawCh.replace(/['"]/g, '').charAt(0) || 'A';
+            newArgs[2] = `'${ch}'`;
+            codeLines[obj.lineIdx] = `display.drawChar(${newArgs.join(', ')});`;
+        } else {
+            let newArgs = [...obj.rawArgs];
+            for (let i = 0; i < newArgs.length; i++) {
+                let el = document.getElementById(`p-${i}`);
+                if (el) newArgs[i] = el.value;
+            }
+            codeLines[obj.lineIdx] = `display.${obj.cmd}(${newArgs.join(', ')});`;
+        }
+
+        document.getElementById('code-input').value = codeLines.join('\n');
+        processCode(false, true);
+    }
+
+    function initResizers() {
+        const resizer1 = document.getElementById('resizer-1');
+        const resizer2 = document.getElementById('resizer-2');
+        const col1 = document.getElementById('col-1');
+        const col2 = document.getElementById('col-2');
+        const col3 = document.getElementById('col-3');
+        const container = document.querySelector('.main-area');
+
+        let activeResizer = null;
+
+        function onMouseDown(e, resizer) {
+            activeResizer = resizer;
+            resizer.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+        }
+
+        resizer1.addEventListener('mousedown', (e) => onMouseDown(e, resizer1));
+        resizer2.addEventListener('mousedown', (e) => onMouseDown(e, resizer2));
+
+        window.addEventListener('mousemove', (e) => {
+            if (!activeResizer) return;
+            const containerRect = container.getBoundingClientRect();
+            
+            if (activeResizer === resizer1) {
+                let newW1 = e.clientX - containerRect.left;
+                if (newW1 < 150) newW1 = 150;
+                if (newW1 > containerRect.width - 300) newW1 = containerRect.width - 300;
+                col1.style.width = `${newW1}px`;
+            } else if (activeResizer === resizer2) {
+                let newW3 = containerRect.right - e.clientX;
+                if (newW3 < 200) newW3 = 200;
+                if (newW3 > containerRect.width - 300) newW3 = containerRect.width - 300;
+                col3.style.width = `${newW3}px`;
+                col3.style.flex = 'none';
+            }
+        });
+
+        window.addEventListener('mouseup', () => {
+            if (activeResizer) {
+                activeResizer.classList.remove('dragging');
+                activeResizer = null;
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+            }
+        });
+    }
+
+    document.getElementById('code-input').value = initialCode;
+    updateInsertFields();
+    initResizers();
+    processCode(true);
+</script>
+</body>
+</html>
