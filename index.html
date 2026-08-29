@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -359,7 +360,10 @@ void loop() {}</pre>
         'setPartialWindow': { args: 4, sig: 'setPartialWindow(x, y, w, h)' }
     };
 
-    const initialCode = `display.fillScreen(GxEPD_WHITE);
+    const initialCode = `
+
+
+display.fillScreen(GxEPD_WHITE);
 
 // Variables (resolved by the live parser)
 int margin = 10;
@@ -378,22 +382,36 @@ display.fillTriangle(80, 120, 110, 70, 140, 120, GxEPD_RED);
 // Lines & pixel
 display.drawLine(160, 70, 220, 120, GxEPD_BLUE);
 display.drawFastVLine(240, 70, 50, GxEPD_GREEN);
-display.drawPixel(260, 95, GxEPD_BLACK);
+display.drawPixel(270, 95, GxEPD_BLACK);
 
 // Experimental for-loop (FastHLines)
 for (int i = 0; i < 6; i++) {
-  display.drawFastHLine(display.width() / 2 - 30, display.height() / 2 + i * 8, 20 + i * 10, GxEPD_BLACK);
+  display.drawFastHLine(display.width() *3 / 4, display.height() / 4 + i * 8, 20 + i * 10, GxEPD_BLACK);
 }
 
 // width() / height() + text helpers
 display.setTextColor(GxEPD_BLACK);
 display.setTextSize(2);
-display.setCursor(margin + 100, display.height() - 80);
-display.print("Liveview Editor");
+display.setCursor(margin + 10, display.height()/2);
+display.print("Visual Editor");
 display.setTextSize(1);
 display.setTextColor(GxEPD_RED);
-display.setCursor(margin + 120, display.height() - 50);
-display.println(" for GxEPD2 e-ink displays");
+int tx = display.getCursorX() + 10;
+int ty = display.getCursorY() + 5;
+display.setCursor(tx, ty);
+display.println("for GxEPD2 e-ink displays");
+display.setTextSize(2);
+display.setTextColor(GxEPD_BLUE);
+display.setCursor(margin, display.height()/2 + 40);
+display.print("-Write code, get parser feedback");
+display.setCursor(margin, display.height()/2 + 60);
+display.print(" and live preview;");
+display.setCursor(margin, display.height()/2 + 85);
+display.print("-Insert, drag, resize here");
+display.setCursor(margin, display.height()/2 + 105);
+display.print(" and get code generated!");
+
+
 `;
 
 
@@ -417,6 +435,8 @@ display.println(" for GxEPD2 e-ink displays");
     let debounceTimer = null;
 
     let textState = { color: 'GxEPD_BLACK', bg: null, sizeX: 1, sizeY: 1 };
+    // Updated during processCode so evaluateExpression can resolve getCursorX/Y
+    let liveCursor = { x: 0, y: 0 };
 
     /** Escape text for safe insertion into HTML */
     function escapeHtml(str) {
@@ -787,6 +807,11 @@ display.println(" for GxEPD2 e-ink displays");
             }
             safeExpr = safeExpr.replace(/display\.width\(\)/g, document.getElementById('disp-w').value);
             safeExpr = safeExpr.replace(/display\.height\(\)/g, document.getElementById('disp-h').value);
+            // Adafruit_GFX cursor getters (values from the live parse cursor)
+            safeExpr = safeExpr.replace(/display\.getCursorX\(\)/g, String(liveCursor.x));
+            safeExpr = safeExpr.replace(/display\.getCursorY\(\)/g, String(liveCursor.y));
+            safeExpr = safeExpr.replace(/getCursorX\(\)/g, String(liveCursor.x));
+            safeExpr = safeExpr.replace(/getCursorY\(\)/g, String(liveCursor.y));
 
             const asColorPostSub = normalizeColorToken(safeExpr);
             if (colorHexMap[asColorPostSub]) return asColorPostSub;
@@ -955,15 +980,24 @@ display.println(" for GxEPD2 e-ink displays");
             currentCursor.y = args[1];
             currentCursor.lineIdx = lineIdx;
             currentCursor.printCount = 0;
+            liveCursor.x = currentCursor.x;
+            liveCursor.y = currentCursor.y;
         } else if (cmd === 'print' || cmd === 'println') {
-            if (!textTracker.hasSetCursor) {
-                textWarns.push("⚠️ Missing setCursor() before print — position defaulted to (0,0).");
+            const drawX = currentCursor.x;
+            const drawY = currentCursor.y;
+            const wasFirstAfterCursor = (currentCursor.printCount === 0);
+            const hadPriorText = (currentCursor.printCount > 0);
+
+            if (!textTracker.hasSetCursor && wasFirstAfterCursor) {
+                textWarns.push("⚠️ No setCursor() yet — position defaulted to (0,0).");
+            } else if (hadPriorText) {
+                textWarns.push("💡 Continues from last print/println cursor position (GFX behaviour).");
             }
             if (!textTracker.hasSetTextColor) {
-                textWarns.push("⚠️ Missing setTextColor() before print — color defaulted to GxEPD_BLACK.");
+                textWarns.push("⚠️ Missing setTextColor() — color defaulted to GxEPD_BLACK.");
             }
             if (!textTracker.hasSetTextSize) {
-                textWarns.push("⚠️ Missing setTextSize() before print — text size defaulted to 1.");
+                textWarns.push("⚠️ Missing setTextSize() — text size defaulted to 1.");
             }
             textWarns.push("💡 Note: Real e-ink glyphs & spacing will differ slightly on actual display.");
 
@@ -974,8 +1008,8 @@ display.println(" for GxEPD2 e-ink displays");
 
             currentCursor.printCount++;
 
-            obj.x = currentCursor.x;
-            obj.y = currentCursor.y;
+            obj.x = drawX;
+            obj.y = drawY;
             obj.text = textStr;
             obj.width = textWidth;
             obj.height = textHeight;
@@ -984,18 +1018,26 @@ display.println(" for GxEPD2 e-ink displays");
             obj.textBg = textState.bg;
             obj.sizeX = sx;
             obj.sizeY = sy;
-            obj.hasDedicatedCursor = (currentCursor.lineIdx !== -1 && currentCursor.printCount === 1);
+            obj.hasDedicatedCursor = (currentCursor.lineIdx !== -1 && wasFirstAfterCursor);
+            obj.followsPreviousText = hadPriorText;
+            obj.missingTextColor = !textTracker.hasSetTextColor;
+            obj.missingTextSize = !textTracker.hasSetTextSize;
+            obj.missingCursor = !textTracker.hasSetCursor && wasFirstAfterCursor;
 
             if (isOutOfBounds(cmd, [obj.x, obj.y], textWidth, textHeight)) {
                 outOfBoundsWarn = `⚠️ Out of bounds! Text extends outside canvas display limits.`;
             }
 
+            // Advance like Adafruit_GFX: print moves right; println goes to next line
             if (cmd === 'println') {
                 currentCursor.x = 0;
-                currentCursor.y += textHeight;
+                currentCursor.y = drawY + textHeight;
             } else {
-                currentCursor.x += textWidth;
+                currentCursor.x = drawX + textWidth;
+                currentCursor.y = drawY;
             }
+            liveCursor.x = currentCursor.x;
+            liveCursor.y = currentCursor.y;
         } else if (cmd === 'drawChar') {
             let ch = String(args[2]);
             if (ch.length > 1) ch = ch.charAt(0);
@@ -1052,6 +1094,8 @@ display.println(" for GxEPD2 e-ink displays");
         drawObjects = [];
         let vars = {};
         let currentCursor = { x: 0, y: 0, lineIdx: -1, printCount: 0 };
+        liveCursor.x = 0;
+        liveCursor.y = 0;
         textState = { color: 'GxEPD_BLACK', bg: null, sizeX: 1, sizeY: 1 };
         let textTracker = { hasSetCursor: false, hasSetTextColor: false, hasSetTextSize: false };
         let sawDrawable = false;
@@ -1572,7 +1616,13 @@ display.println(" for GxEPD2 e-ink displays");
                 ctx.font = `${fontPx}px monospace`;
                 ctx.textAlign = 'left';
                 ctx.textBaseline = 'top';
-                ctx.fillText(obj.text, obj.x, obj.y);
+                // Draw one glyph per GFX cell (6×size wide) so consecutive prints abut
+                // instead of leaving a large gap from measureText vs fixed-cell mismatch
+                const cellW = gfxCharW(obj.sizeX || 1);
+                const str = String(obj.text || '');
+                for (let i = 0; i < str.length; i++) {
+                    ctx.fillText(str.charAt(i), obj.x + i * cellW, obj.y);
+                }
             }
 
             if (!isExport && idx === selectedIndex) {
@@ -1893,10 +1943,25 @@ display.println(" for GxEPD2 e-ink displays");
         }
     }
 
-    function addCursorToText(lineIdx, defaultX, defaultY) {
-        codeLines.splice(lineIdx, 0, `display.setCursor(${defaultX}, ${defaultY});`);
+    function insertCodeLineBefore(lineIdx, lineText) {
+        codeLines = document.getElementById('code-input').value.split('\n');
+        if (lineIdx < 0) lineIdx = 0;
+        if (lineIdx > codeLines.length) lineIdx = codeLines.length;
+        codeLines.splice(lineIdx, 0, lineText);
         document.getElementById('code-input').value = codeLines.join('\n');
         processCode(true);
+    }
+
+    function addCursorToText(lineIdx, defaultX, defaultY) {
+        insertCodeLineBefore(lineIdx, `display.setCursor(${defaultX}, ${defaultY});`);
+    }
+
+    function addTextColorBefore(lineIdx, color) {
+        insertCodeLineBefore(lineIdx, `display.setTextColor(${color || 'GxEPD_BLACK'});`);
+    }
+
+    function addTextSizeBefore(lineIdx, size) {
+        insertCodeLineBefore(lineIdx, `display.setTextSize(${size || 1});`);
     }
 
     function updateInsertFields() {
@@ -2093,8 +2158,48 @@ display.println(" for GxEPD2 e-ink displays");
             html += makeColorSelectUI('Background', raw[4], 'p-4');
             html += makePropUI('Size', raw[5], 'p-5');
         } else if (['print', 'println'].includes(obj.cmd)) {
+            let setupTips = '';
+            if (obj.missingCursor) {
+                setupTips += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-bottom:6px;">
+                    ⚠️ No <code>setCursor</code> yet — text is at (0,0).
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addCursorToText(${obj.lineIdx}, ${obj.x}, ${obj.y})">➕ Add setCursor(${obj.x}, ${obj.y})</button>
+                    </div>
+                </div>`;
+            } else if (obj.followsPreviousText) {
+                setupTips += `<div style="width:100%; background:#1a2a3a; border:1px solid #2a4a6a; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#9cdcfe; margin-bottom:6px;">
+                    💡 Continues from the last print/println at <code>(${obj.x}, ${obj.y})</code> (normal GFX behaviour).
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addCursorToText(${obj.lineIdx}, ${obj.x}, ${obj.y})">➕ Add setCursor(${obj.x}, ${obj.y}) for a fixed position</button>
+                    </div>
+                </div>`;
+            } else if (!obj.hasDedicatedCursor) {
+                setupTips += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-bottom:6px;">
+                    💡 Text position relies on <code>display.setCursor(x, y)</code>. To drag this text, add a cursor above it.
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addCursorToText(${obj.lineIdx}, ${obj.x}, ${obj.y})">➕ Add setCursor(${obj.x}, ${obj.y})</button>
+                    </div>
+                </div>`;
+            }
+            if (obj.missingTextColor) {
+                setupTips += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-bottom:6px;">
+                    ⚠️ No <code>setTextColor</code> yet — defaulting to GxEPD_BLACK.
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addTextColorBefore(${obj.lineIdx}, 'GxEPD_BLACK')">➕ Add setTextColor(GxEPD_BLACK)</button>
+                    </div>
+                </div>`;
+            }
+            if (obj.missingTextSize) {
+                setupTips += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b; margin-bottom:6px;">
+                    ⚠️ No <code>setTextSize</code> yet — defaulting to 1.
+                    <div style="margin-top:6px;">
+                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addTextSizeBefore(${obj.lineIdx}, 1)">➕ Add setTextSize(1)</button>
+                    </div>
+                </div>`;
+            }
+            html += setupTips;
+
             if (obj.hasDedicatedCursor) {
-                // Show original setCursor expressions (variables) when available
                 let cursorRawX = obj.x, cursorRawY = obj.y;
                 const cursorObj = drawObjects.find(o => o.cmd === 'setCursor' && o.lineIdx === obj.cursorLineIdx);
                 if (cursorObj && cursorObj.rawArgs && cursorObj.rawArgs.length >= 2) {
@@ -2112,13 +2217,6 @@ display.println(" for GxEPD2 e-ink displays");
                 }
                 html += makePropUI('Cursor X', cursorRawX, 'p-x');
                 html += makePropUI('Cursor Y', cursorRawY, 'p-y');
-            } else {
-                html += `<div style="width:100%; background:#332b00; border:1px solid #665500; padding:8px 10px; border-radius:4px; font-size:0.85em; color:#e5c07b;">
-                    💡 <strong>Tip:</strong> Text position relies on <code>display.setCursor(x, y)</code>. To drag or reposition this text on canvas, add a cursor above it.
-                    <div style="margin-top:6px;">
-                        <button style="background:#0e639c; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; font-weight:bold;" onclick="addCursorToText(${obj.lineIdx}, ${obj.x}, ${obj.y})">➕ Add setCursor(${obj.x}, ${obj.y})</button>
-                    </div>
-                </div>`;
             }
             html += `<div class="prop-group"><label>Text:</label> <input type="text" id="p-t" value="${escapeHtml(obj.text)}" oninput="applyProperties()" onchange="saveHistoryState()"></div>`;
         } else if (obj.cmd === 'fillScreen') {
