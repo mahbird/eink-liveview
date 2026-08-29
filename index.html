@@ -61,8 +61,8 @@
         .err-hint { color: #ff9800; font-size: 0.85em; display: block; margin-left: 20px; }
         .warn-hint { color: #e5c07b; font-size: 0.85em; display: block; margin-left: 20px; }
         
-        .canvas-container { flex: 1; display: flex; background: #2d2d2d; position: relative; overflow: auto; padding: 20px; }
-        canvas { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.5); cursor: default; image-rendering: pixelated; image-rendering: crisp-edges; margin: auto; flex-shrink: 0; }
+        .canvas-container { flex: 1; display: flex; background: #2d2d2d; position: relative; overflow: auto; padding: 20px; touch-action: none; }
+        canvas { background: white; box-shadow: 0 0 10px rgba(0,0,0,0.5); cursor: default; image-rendering: pixelated; image-rendering: crisp-edges; margin: auto; flex-shrink: 0; touch-action: none; }
         
         .properties-panel { background: #252526; padding: 12px 15px; border-top: 1px solid #444; min-height: 120px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; flex-shrink: 0; }
         .prop-group { display: flex; align-items: center; gap: 5px; }
@@ -226,12 +226,12 @@ Select the correct display driver matching your panel controller (e.g. <code>GxE
                 <p>Paged drawing must occur inside a <code>firstPage()</code> / <code>nextPage()</code> loop. Always call display.powerOff() to power the panel down to avoid damaging the panel and saving power:</p>
 <pre>#include &lt;GxEPD2_BW.h&gt; // The display class e.g. BW/3C/4C/7C
 
+#define GxEPD2_DRIVER_CLASS GxEPD2_154_D67// Change GxEPD2_154_D67 to your actual driver class, Consult GxEPD2 display selection in the examples
 
-GxEPD2_BW&lt;GxEPD2_154_D67, GxEPD2_154_D67::HEIGHT&gt; display(
-  GxEPD2_154_D67(/*CS=*/ 15, /*DC=*/ 27, /*RST=*/ 26, /*BUSY=*/ 25));
   
-//GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, PAGE_HEIGHT> display(GxEPD2_DRIVER_CLASS(CS, DC, RST, BUSY));
-//Consult GxEPD2 examples if you are unsure about this
+GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, GxEPD2_DRIVER_CLASS::HEIGHT> display(GxEPD2_DRIVER_CLASS(CS, DC, RST, BUSY));
+//If your controller doesn't have enough buffer and/ or if you are using a large display, change GxEPD2_DRIVER_CLASS::HEIGHT to a smaller value
+// Change CS, DC, RST, BUSY to your actual pin number
 
 
 void setup() {
@@ -608,9 +608,12 @@ display.print(" and get code generated!");
     function getCanvasCoords(e) {
         const canvas = document.getElementById('display-canvas');
         const rect = canvas.getBoundingClientRect();
+        const pt = (e.touches && e.touches[0]) || (e.changedTouches && e.changedTouches[0]) || e;
+        const cx = pt.clientX != null ? pt.clientX : 0;
+        const cy = pt.clientY != null ? pt.clientY : 0;
         return {
-            x: (e.clientX - rect.left) * (canvas.width / rect.width),
-            y: (e.clientY - rect.top) * (canvas.height / rect.height)
+            x: (cx - rect.left) * (canvas.width / rect.width),
+            y: (cy - rect.top) * (canvas.height / rect.height)
         };
     }
 
@@ -1688,9 +1691,86 @@ display.print(" and get code generated!");
     let panStartX = 0, panStartY = 0;
     let scrollStartX = 0, scrollStartY = 0;
 
+    // Multi-touch tracking (two-finger pan + pinch zoom)
+    let activePointers = new Map();
+    let pinchStartDist = 0;
+    let pinchStartZoomIdx = 0;
+
+    function getZoomOptions() {
+        const zoomSelect = document.getElementById('zoom-select');
+        return Array.from(zoomSelect.options).map(o => parseFloat(o.value));
+    }
+
+    function touchDistance(pts) {
+        const arr = [...pts.values()];
+        if (arr.length < 2) return 0;
+        return Math.hypot(arr[0].x - arr[1].x, arr[0].y - arr[1].y);
+    }
+
+    function touchMidpoint(pts) {
+        const arr = [...pts.values()];
+        return { x: (arr[0].x + arr[1].x) / 2, y: (arr[0].y + arr[1].y) / 2 };
+    }
+
     container.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    container.addEventListener('mousedown', (e) => {
+    function commitPointerInteraction() {
+        if ((isDragging || isResizing) && selectedIndex !== -1) {
+            isDragging = false;
+            isResizing = false;
+            if (dragHasMoved) {
+                let obj = drawObjects[selectedIndex];
+                
+                if (['print', 'println'].includes(obj.cmd)) {
+                    if (obj.hasDedicatedCursor && obj.cursorLineIdx !== -1) {
+                        codeLines[obj.cursorLineIdx] = `display.setCursor(${obj.x}, ${obj.y});`;
+                    }
+                } else {
+                    let newArgs = [...obj.rawArgs];
+                    if (['fillRect', 'drawRect', 'setPartialWindow'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                    } else if (['fillRoundRect', 'drawRoundRect'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                    } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
+                    } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[3] = obj.args[3]; newArgs[4] = obj.args[4];
+                    } else if (['drawFastHLine', 'drawFastVLine'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
+                    } else if (obj.cmd === 'drawPixel' || obj.cmd === 'setCursor') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                    } else if (obj.cmd === 'drawChar') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                    } else if (obj.cmd === 'drawLine') {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                    } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
+                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
+                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
+                        newArgs[4] = obj.args[4]; newArgs[5] = obj.args[5];
+                    }
+                    codeLines[obj.lineIdx] = `display.${obj.cmd}(${newArgs.join(', ')});`;
+                }
+                
+                document.getElementById('code-input').value = codeLines.join('\n');
+                processCode(true);
+            } else {
+                processCode(false);
+            }
+        }
+        isDragging = false;
+        isResizing = false;
+        resizeHandleId = null;
+        dragHasMoved = false;
+        isPanning = false;
+        container.style.cursor = 'default';
+    }
+
+    // Pointer Events: mouse + touch + pen
+    canvas.addEventListener('pointerdown', (e) => {
         if (e.button === 2) {
             isPanning = true;
             panStartX = e.clientX;
@@ -1698,14 +1778,32 @@ display.print(" and get code generated!");
             scrollStartX = container.scrollLeft;
             scrollStartY = container.scrollTop;
             container.style.cursor = 'grabbing';
+            return;
         }
-    });
+        if (e.button !== 0 && e.pointerType === 'mouse') return;
 
-    canvas.addEventListener('mousedown', (e) => {
-        if (e.button !== 0) return;
+        activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+
+        if (activePointers.size >= 2) {
+            isDragging = false;
+            isResizing = false;
+            isPanning = true;
+            const mid = touchMidpoint(activePointers);
+            panStartX = mid.x;
+            panStartY = mid.y;
+            scrollStartX = container.scrollLeft;
+            scrollStartY = container.scrollTop;
+            pinchStartDist = touchDistance(activePointers);
+            const zoomSelect = document.getElementById('zoom-select');
+            const options = getZoomOptions();
+            pinchStartZoomIdx = Math.max(0, options.indexOf(parseFloat(zoomSelect.value)));
+            return;
+        }
+
+        e.preventDefault();
         const { x, y } = getCanvasCoords(e);
 
-        // Prefer resize handle of the already-selected object
         if (selectedIndex >= 0 && selectedIndex < drawObjects.length) {
             const sel = drawObjects[selectedIndex];
             if (!sel.isLoopGenerated) {
@@ -1762,7 +1860,6 @@ display.print(" and get code generated!");
                 selectedIndex = i;
                 selectedLineIdx = obj.lineIdx;
                 if (!obj.isLoopGenerated) {
-                    // Check if click landed on a handle of this newly selected object
                     const hid = hitTestHandle(obj, x, y);
                     if (hid) {
                         isResizing = true;
@@ -1789,7 +1886,35 @@ display.print(" and get code generated!");
         processCode(false, false);
     });
 
-    window.addEventListener('mousemove', (e) => {
+    window.addEventListener('pointermove', (e) => {
+        if (activePointers.has(e.pointerId)) {
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        }
+
+        if (activePointers.size >= 2) {
+            e.preventDefault();
+            const mid = touchMidpoint(activePointers);
+            container.scrollLeft = scrollStartX - (mid.x - panStartX);
+            container.scrollTop = scrollStartY - (mid.y - panStartY);
+
+            const dist = touchDistance(activePointers);
+            if (pinchStartDist > 10 && dist > 0) {
+                const ratio = dist / pinchStartDist;
+                const options = getZoomOptions();
+                let idx = pinchStartZoomIdx;
+                if (ratio > 1.25 && idx < options.length - 1) idx = Math.min(options.length - 1, pinchStartZoomIdx + 1);
+                if (ratio > 1.6) idx = Math.min(options.length - 1, pinchStartZoomIdx + 2);
+                if (ratio < 0.8 && idx > 0) idx = Math.max(0, pinchStartZoomIdx - 1);
+                if (ratio < 0.55) idx = Math.max(0, pinchStartZoomIdx - 2);
+                const zoomSelect = document.getElementById('zoom-select');
+                if (parseFloat(zoomSelect.value) !== options[idx]) {
+                    zoomSelect.value = options[idx];
+                    updateZoom();
+                }
+            }
+            return;
+        }
+
         if (isPanning) {
             const dx = e.clientX - panStartX;
             const dy = e.clientY - panStartY;
@@ -1798,12 +1923,11 @@ display.print(" and get code generated!");
             return;
         }
 
-        // Resize in progress
         if (isResizing && selectedIndex !== -1 && resizeHandleId) {
             const { x: mouseX, y: mouseY } = getCanvasCoords(e);
             const obj = drawObjects[selectedIndex];
             applyResize(obj, resizeHandleId, mouseX, mouseY);
-            dragHasMoved = true; // reuse flag so mouseup commits the change
+            dragHasMoved = true;
             renderCanvas();
             return;
         }
@@ -1838,68 +1962,25 @@ display.print(" and get code generated!");
         renderCanvas();
     });
 
-    window.addEventListener('mouseup', (e) => {
-        if (e.button === 2 || isPanning) {
+    function onPointerEnd(e) {
+        activePointers.delete(e.pointerId);
+        if (activePointers.size < 2) {
             isPanning = false;
             container.style.cursor = 'default';
         }
-
-        if ((isDragging || isResizing) && selectedIndex !== -1) {
-            const wasResizing = isResizing;
-            isDragging = false;
-            isResizing = false;
-            // Only rewrite the source line if the object actually moved or was resized.
-            // A pure click must not replace variables (margin, boxW, …) with numbers.
-            if (dragHasMoved) {
-                let obj = drawObjects[selectedIndex];
-                
-                if (['print', 'println'].includes(obj.cmd)) {
-                    if (obj.hasDedicatedCursor && obj.cursorLineIdx !== -1) {
-                        codeLines[obj.cursorLineIdx] = `display.setCursor(${obj.x}, ${obj.y});`;
-                    }
-                } else {
-                    // Write updated geometry as numbers; keep colour / other raw expressions
-                    let newArgs = [...obj.rawArgs];
-                    if (['fillRect', 'drawRect', 'setPartialWindow'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
-                    } else if (['fillRoundRect', 'drawRoundRect'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
-                        // keep radius rawArgs[4] and colour
-                    } else if (['fillCircle', 'drawCircle'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
-                    } else if (['drawBitmap', 'drawInvertedBitmap'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                        newArgs[3] = obj.args[3]; newArgs[4] = obj.args[4];
-                    } else if (['drawFastHLine', 'drawFastVLine'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1]; newArgs[2] = obj.args[2];
-                    } else if (obj.cmd === 'drawPixel' || obj.cmd === 'setCursor') {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                    } else if (obj.cmd === 'drawChar') {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                    } else if (obj.cmd === 'drawLine') {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
-                    } else if (['fillTriangle', 'drawTriangle'].includes(obj.cmd)) {
-                        newArgs[0] = obj.args[0]; newArgs[1] = obj.args[1];
-                        newArgs[2] = obj.args[2]; newArgs[3] = obj.args[3];
-                        newArgs[4] = obj.args[4]; newArgs[5] = obj.args[5];
-                    }
-                    codeLines[obj.lineIdx] = `display.${obj.cmd}(${newArgs.join(', ')});`;
-                }
-                
-                document.getElementById('code-input').value = codeLines.join('\n');
-                processCode(true);
-            } else {
-                // Pure click — just refresh selection highlight / properties
-                processCode(false);
-            }
+        if (activePointers.size === 0) {
+            commitPointerInteraction();
         }
-        isDragging = false;
-        isResizing = false;
-        resizeHandleId = null;
-        dragHasMoved = false;
+    }
+
+    window.addEventListener('pointerup', onPointerEnd);
+    window.addEventListener('pointercancel', onPointerEnd);
+
+    window.addEventListener('mouseup', (e) => {
+        if (e.button === 2) {
+            isPanning = false;
+            container.style.cursor = 'default';
+        }
     });
 
     window.addEventListener('keydown', (e) => {
@@ -2088,7 +2169,7 @@ display.print(" and get code generated!");
     function updatePropertiesPanel() {
         const panel = document.getElementById('props-panel');
         if (selectedIndex === -1) {
-            panel.innerHTML = '<div style="color: #888; font-size: 0.9em; width:100%;">Select an object on the canvas to edit, drag, or resize via the blue handles. Scroll to zoom. Pan with right mouse button. Grid overlay options available.</div>';
+            panel.innerHTML = '<div style="color: #888; font-size: 0.9em; width:100%;">Select an object to edit, drag, or resize via blue handles. Wheel or pinch to zoom. Pan: right-drag (desktop) or two-finger drag (touch).</div>';
             return;
         }
 
