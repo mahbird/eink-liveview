@@ -229,9 +229,9 @@ Select the correct display driver matching your panel controller (e.g. <code>GxE
 #define GxEPD2_DRIVER_CLASS GxEPD2_154_D67// Change GxEPD2_154_D67 to your actual driver class, Consult GxEPD2 display selection in the examples
 
   
-GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, GxEPD2_DRIVER_CLASS::HEIGHT> display(GxEPD2_DRIVER_CLASS(CS, DC, RST, BUSY));
+GxEPD2_DISPLAY_CLASS<GxEPD2_DRIVER_CLASS, GxEPD2_DRIVER_CLASS::HEIGHT> display(GxEPD2_DRIVER_CLASS(CS, DC, RST, BUSY)); // Change CS, DC, RST, BUSY to your actual pin number
 //If your controller doesn't have enough buffer and/ or if you are using a large display, change GxEPD2_DRIVER_CLASS::HEIGHT to a smaller value
-// Change CS, DC, RST, BUSY to your actual pin number
+
 
 
 void setup() {
@@ -239,16 +239,14 @@ void setup() {
   // display.setRotation(1); // optional: 0,1,2,3
 
   display.setFullWindow();   // MUST be before firstPage()
-  // display.setPartialWindow(x, y, w, h); // Or partial update window if your display supports it, some manufacturers recommend a full refresh every 5 partial refresh and they warn that exceeding this limit too often can cause permanent abnormal display states or irreversible uneven fading on smaller panels. I personally only do a full refresh for my e-ink clock twice per hour (1 in 30) which seem to be find after 2 years but adjust the refreshes at your own risk.
+  // display.setPartialWindow(x, y, w, h); 
+  /* Or partial update window if your display supports it, some manufacturers recommend a full refresh every 5 partial refresh and they warn that exceeding this limit too often can cause permanent abnormal display states or irreversible uneven fading on smaller panels. I personally only do a full refresh for my e-ink clock twice per hour (1 in 30) which seem to be find after 2 years but adjust the refreshes at your own risk. */
 
   display.firstPage();
   do {
-    // --- Paste Visual Editor Output Here ---
-    display.fillScreen(GxEPD_WHITE);
-    display.setTextColor(GxEPD_BLACK);
-    display.setTextSize(1);
-    display.setCursor(10, 20);
-    display.print("Hello World!");
+  
+    // !!!--- Paste Visual Editor Output Here ---!!!
+
   } while (display.nextPage());
 
   display.powerOff(); // prevent burn-in / save power
@@ -276,7 +274,7 @@ void loop() {}</pre>
                 <h4>Features</h4>
                 <ul style="margin: 6px 0 8px 18px; padding: 0; line-height: 1.5;">
                     <li>Live canvas preview for BW, 3-colour, 4-colour, 6-colour (Spectra) and 7-colour (ACeP) e-ink displays</li>
-                    <li>Supports most GxEPD2 / Adafruit_GFX drawing primitives, text, simple variables and for-loops (experimental)</li>
+                    <li>Supports most GxEPD2 / Adafruit_GFX drawing primitives, text, simple variables and for-loops (experimental, custom functions are not supported)</li>
 					<li>Because the GxEPD2 underlying rendering is Adafruit_GFX, most of this tool should work for LCD displays using Adafruit_GFX as well (just change the colors)</li>
                     <li>Drag objects on the canvas or edit them in the properties panel</li>
 <li>Insert objects directly with the insert tools</li>

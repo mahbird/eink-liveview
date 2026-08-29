@@ -71,7 +71,7 @@ This editor only previews **drawing** commands. To run on real hardware you stil
 
 See the in-app **Beginner's Guide** for a full sketch skeleton and pin notes.
 
-Official library: [ZinggJM/GxEPD2](https://github.com/ZinggJM/GxEPD2)
+You must install the GxEPD2 library: [ZinggJM/GxEPD2](https://github.com/ZinggJM/GxEPD2)
 
 ---
 
