@@ -6,7 +6,7 @@ Write drawing commands and see them rendered live on a canvas, drag or resize ob
 
 **Use it online:** [mahbird.github.io/eink-liveview](https://mahbird.github.io/eink-liveview/)
 
-> **Note:** Built for desktop use with keyboard and mouse.
+> **Note:** This tool is built for desktop use with keyboard and mouse with limited touch support
 
 ---
 
